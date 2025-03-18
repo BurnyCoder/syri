@@ -30,10 +30,23 @@ def claude35sonnet(prompt):
     )
     return completion.choices[0].message.content
 
-def claude37sonnet(prompt):
-    """Wrapper function for Claude 3.7 Sonnet"""
+def claude37sonnet(prompt_or_messages):
+    """Wrapper function for Claude 3.7 Sonnet
+    
+    Args:
+        prompt_or_messages: Either a string prompt or a list of message dictionaries
+                           with 'role' and 'content' keys
+    
+    Returns:
+        The model's response text
+    """
+    if isinstance(prompt_or_messages, str):
+        messages = [{"role": "user", "content": prompt_or_messages}]
+    else:
+        messages = prompt_or_messages
+        
     completion = portkey_anthropic.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         model="claude-3-7-sonnet-latest",
         max_tokens=8192
     )

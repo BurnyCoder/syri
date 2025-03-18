@@ -1,6 +1,6 @@
 import assemblyai as aai
-from elevenlabs.client import ElevenLabs
-from elevenlabs import stream
+import elevenlabs
+from elevenlabs import stream, set_api_key
 import os
 from dotenv import load_dotenv
 from src.portkey import claude37sonnet
@@ -28,10 +28,10 @@ class AIVoiceAgent:
             raise ValueError("Portkey Virtual Key not found. Please set PORTKEY_VIRTUAL_KEY_ANTHROPIC in your .env file")
             
         aai.settings.api_key = assemblyai_api_key
-        self.client = ElevenLabs(
-            api_key=elevenlabs_api_key
-        )
-
+        # Set ElevenLabs API key
+        set_api_key(elevenlabs_api_key)
+        # No need to initialize a client with newer versions of elevenlabs
+        
         self.transcriber = None
 
         self.full_transcript = [
@@ -86,54 +86,33 @@ class AIVoiceAgent:
 
         print("Claude 3.7 Sonnet:", end="\r\n")
         
-        # Prepare messages in the format expected by Claude API
-        messages = []
-        for message in self.full_transcript:
-            messages.append({"role": message["role"], "content": message["content"]})
+        # Get response from Claude 3.7 Sonnet using the full conversation history
+        response_text = claude37sonnet(self.full_transcript)
         
-        from portkey_ai import Portkey
-
-        # Initialize Portkey client
-        portkey = Portkey(
-            api_key=os.getenv("PORTKEY_API_KEY"),
-            virtual_key=os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
-        )
+        # Break the response into sentences for streaming audio
+        sentences = []
+        temp = ""
+        for char in response_text:
+            temp += char
+            if char in ['.', '!', '?'] and len(temp.strip()) > 0:
+                sentences.append(temp)
+                temp = ""
         
-        # Get response from Claude 3.7 Sonnet
-        response = portkey.chat.completions.create(
-            messages=messages,
-            model="claude-3-7-sonnet-latest",
-            stream=True
-        )
-
-        text_buffer = ""
+        if temp:  # Add any remaining text
+            sentences.append(temp)
+        
         full_text = ""
-        
-        # Process the streaming response
-        for chunk in response:
-            if chunk.choices[0].delta.content:
-                text_buffer += chunk.choices[0].delta.content
-                if text_buffer.endswith('.') or text_buffer.endswith('!') or text_buffer.endswith('?'):
-                    audio_stream = self.client.generate(
-                        text=text_buffer,
-                        model="eleven_turbo_v2",
-                        stream=True
-                    )
-                    print(text_buffer, end="\n", flush=True)
-                    stream(audio_stream)
-                    full_text += text_buffer
-                    text_buffer = ""
-
-        if text_buffer:
-            audio_stream = self.client.generate(
-                text=text_buffer,
+        # Process each sentence
+        for sentence in sentences:
+            audio_stream = elevenlabs.generate(
+                text=sentence,
                 model="eleven_turbo_v2",
                 stream=True
             )
-            print(text_buffer, end="\n", flush=True)
+            print(sentence, end="\n", flush=True)
             stream(audio_stream)
-            full_text += text_buffer
-
+            full_text += sentence
+        
         self.full_transcript.append({"role": "assistant", "content": full_text})
 
         self.start_transcription()
