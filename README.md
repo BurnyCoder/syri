@@ -56,25 +56,10 @@ python run.py
 
 This script performs pre-checks to ensure all requirements are met and provides a better user experience.
 
-### Method 2: Direct execution
-
-```bash
-python -m src.syri_agent
-```
-
-With either method:
 1. Press Enter to start recording
 2. Speak into your microphone
 3. Press Enter again when you've finished speaking
 4. The AI will transcribe your speech, process it, and respond both in text (console) and through speech
-
-## How It Works
-
-1. **Audio Recording:** Press Enter to start recording, speak, and press Enter again to stop
-2. **Transcription:** Your speech is converted to text using AssemblyAI's transcription API
-3. **AI Processing:** The text is sent to Claude 3.7 Sonnet via Portkey for processing
-4. **Voice Synthesis:** The AI's response is converted to speech using ElevenLabs
-5. **Streaming:** The audio response is streamed back to you
 
 ## License
 
