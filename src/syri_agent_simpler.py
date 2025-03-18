@@ -2,6 +2,8 @@ import assemblyai as aai
 import elevenlabs
 from elevenlabs import stream, set_api_key
 import os
+import sys
+import platform
 from dotenv import load_dotenv
 from src.portkey import claude37sonnet
 import time
@@ -36,31 +38,59 @@ class AIVoiceAgent:
         # Set ElevenLabs API key
         set_api_key(elevenlabs_api_key)
         
-        # Audio recording settings
+        # Detect operating system
+        self.system = platform.system()
+        print(f"Detected operating system: {self.system}")
+        
+        # Audio recording settings (OS-specific defaults)
         self.chunk = 1024
         self.format = pyaudio.paInt16
         self.channels = 1
-        self.rate = 44100  # Using a standard CD quality rate that's widely supported
         
-        # Suppress error messages from ALSA
-        import sys
-        # No need to reimport os as it's already imported at the top
-        errorfile = os.open('/dev/null', os.O_WRONLY)
-        old_stderr = os.dup(2)
-        sys.stderr.flush()
-        os.dup2(errorfile, 2)
-        os.close(errorfile)
+        # Mac typically works better with 44100 Hz, Linux depends on hardware
+        if self.system == 'Darwin':  # macOS
+            self.rate = 44100
+        else:  # Linux and others
+            self.rate = 44100  # Default, will be adjusted based on device
+        
+        # Suppress error messages from audio backends
+        self._suppress_audio_errors()
         
         # Initialize PyAudio
         self.p = pyaudio.PyAudio()
         
         # Restore stderr
-        os.dup2(old_stderr, 2)
-        os.close(old_stderr)
+        self._restore_stderr()
 
         self.full_transcript = [
             {"role": "system", "content": "You are a helpful AI assistant called Syri. Provide concise, friendly responses under 300 characters."},
         ]
+    
+    def _suppress_audio_errors(self):
+        """Suppress error messages from audio backends in a platform-appropriate way"""
+        if self.system == 'Linux':
+            # Linux-specific error suppression
+            errorfile = os.open('/dev/null', os.O_WRONLY)
+            self.old_stderr = os.dup(2)
+            sys.stderr.flush()
+            os.dup2(errorfile, 2)
+            os.close(errorfile)
+        else:
+            # For Mac/Windows, we use a different approach
+            # Store the old stderr
+            self.old_stderr_target = sys.stderr
+            sys.stderr = open(os.devnull, 'w')
+    
+    def _restore_stderr(self):
+        """Restore stderr to its original state"""
+        if self.system == 'Linux' and hasattr(self, 'old_stderr'):
+            # Linux-specific restoration
+            os.dup2(self.old_stderr, 2)
+            os.close(self.old_stderr)
+        elif hasattr(self, 'old_stderr_target'):
+            # Mac/Windows restoration
+            sys.stderr.close()  # Close the null device
+            sys.stderr = self.old_stderr_target
 
     def record_audio(self):
         """Record audio until the user presses Enter"""
@@ -69,36 +99,80 @@ class AIVoiceAgent:
         
         print("Recording... Press Enter to stop.")
         
-        # Find the correct input device index
+        # Find the correct input device index and optimal configuration
+        # based on detected operating system
+        input_device_index = self._select_best_audio_device()
+        
+        if input_device_index is None:
+            print("No suitable input devices found. Please check your microphone connection.")
+            return None
+        
+        # Get the default rate for the selected device
+        device_info = self.p.get_device_info_by_index(input_device_index)
+        default_rate = int(device_info.get('defaultSampleRate'))
+        print(f"Using sample rate: {default_rate} Hz")
+        
+        # For Mac, the callback method usually works better
+        # For Linux, we'll try callback first, then fall back to blocking mode if needed
+        if self.system == 'Darwin':  # macOS
+            return self._record_with_callback(input_device_index, default_rate)
+        else:
+            # Try callback first, fall back to blocking mode if needed
+            result = self._record_with_callback(input_device_index, default_rate)
+            if result:
+                return result
+            else:
+                return self._record_with_blocking(input_device_index, default_rate)
+
+    def _select_best_audio_device(self):
+        """Select the best audio input device based on the platform"""
         input_device_index = None
         info = self.p.get_host_api_info_by_index(0)
         num_devices = info.get('deviceCount')
         
         # Print available audio devices for debugging
         print("\nAvailable audio devices:")
+        preferred_keywords = []
+        
+        # Platform-specific preferred devices
+        if self.system == 'Darwin':  # macOS
+            preferred_keywords = ['built-in', 'microphone', 'input']
+        else:  # Linux
+            preferred_keywords = ['hw', 'mic', 'pulse', 'default']
+        
         for i in range(num_devices):
             device_info = self.p.get_device_info_by_index(i)
             if device_info.get('maxInputChannels') > 0:  # if it's an input device
+                device_name = str(device_info.get('name')).lower()
                 print(f"Input Device {i}: {device_info.get('name')}")
-                # Use the first available input device
+                
+                # Set first found device as fallback
                 if input_device_index is None:
                     input_device_index = i
-                # If we find the hardware device, prefer to use it
-                if "hw:1,0" in str(device_info.get('name')):
+                
+                # Check for platform-specific preferred devices
+                if self.system == 'Linux' and "hw:1,0" in device_name:
                     input_device_index = i
-                    print(f"Selected hardware device: {device_info.get('name')}")
+                    print(f"Selected Linux hardware device: {device_info.get('name')}")
+                    break
+                elif self.system == 'Darwin':  # macOS
+                    for keyword in preferred_keywords:
+                        if keyword in device_name:
+                            input_device_index = i
+                            print(f"Selected Mac input device: {device_info.get('name')}")
+                            return input_device_index
+                
+                # For Linux, check other preferences if hw device not found
+                if self.system == 'Linux':
+                    for keyword in preferred_keywords:
+                        if keyword in device_name:
+                            input_device_index = i
+                            print(f"Selected input device: {device_info.get('name')}")
         
-        if input_device_index is None:
-            print("No input devices found. Please check your microphone connection.")
-            return None
-            
-        # Get the default rate for the selected device
-        device_info = self.p.get_device_info_by_index(input_device_index)
-        default_rate = int(device_info.get('defaultSampleRate'))
-        
-        print(f"Using sample rate: {default_rate} Hz")
-        
-        # Use callback-based recording which is more reliable
+        return input_device_index
+
+    def _record_with_callback(self, input_device_index, sample_rate):
+        """Record audio using callback method (preferred for Mac)"""
         frames = []
         is_recording = True
         
@@ -113,7 +187,7 @@ class AIVoiceAgent:
             stream = self.p.open(
                 format=self.format,
                 channels=self.channels,
-                rate=default_rate,
+                rate=sample_rate,
                 input=True,
                 input_device_index=input_device_index,
                 frames_per_buffer=self.chunk,
@@ -147,100 +221,92 @@ class AIVoiceAgent:
             stream.stop_stream()
             stream.close()
             
-        except Exception as e:
-            print(f"Error setting up audio stream with callback: {e}")
-            print("Falling back to blocking mode...")
+            # Check if we captured any audio
+            if not frames:
+                print("No audio captured with callback method")
+                return None
+                
+            # Create and return temporary audio file
+            return self._save_audio_to_file(frames, sample_rate)
             
-            # Fallback to blocking mode with overflow handling
-            try:
-                # Open audio stream with explicit device index and device-specific sample rate
-                stream = self.p.open(
-                    format=self.format,
-                    channels=self.channels,
-                    rate=default_rate,
-                    input=True,
-                    input_device_index=input_device_index,
-                    frames_per_buffer=self.chunk
-                )
-                
-                # Start a non-blocking input thread
-                stop_recording = threading.Event()
-                
-                def wait_for_enter():
-                    input()  # Wait for Enter to stop recording
-                    stop_recording.set()
-                
-                input_thread = threading.Thread(target=wait_for_enter)
-                input_thread.daemon = True
-                input_thread.start()
-                
-                # Record audio using blocking mode but ignore overflow errors
-                while not stop_recording.is_set():
-                    try:
-                        # Set exception_on_overflow=False to prevent the error
-                        data = stream.read(self.chunk, exception_on_overflow=False)
-                        frames.append(data)
-                    except Exception as e:
-                        if "overflowed" not in str(e).lower():  # Only print if it's not an overflow error
-                            print(f"Error reading from audio stream: {e}")
-                        # Continue recording despite errors
-                
-                # Stop and close the stream
-                stream.stop_stream()
-                stream.close()
-                
-            except Exception as fallback_error:
-                print(f"Error in fallback recording mode: {fallback_error}")
-                # Try standard rates in descending order of quality
-                standard_rates = [48000, 44100, 22050, 11025, 8000]
-                stream = None
-                
-                for rate in standard_rates:
-                    try:
-                        stream = self.p.open(
-                            format=self.format,
-                            channels=self.channels,
-                            rate=rate,
-                            input=True,
-                            input_device_index=input_device_index,
-                            frames_per_buffer=self.chunk
-                        )
-                        print(f"Successfully opened stream with rate: {rate} Hz")
-                        default_rate = rate  # Update rate for WAV file
-                        
-                        # Start a non-blocking input thread
-                        stop_recording = threading.Event()
-                        
-                        def wait_for_enter():
-                            input()  # Wait for Enter to stop recording
-                            stop_recording.set()
-                        
-                        input_thread = threading.Thread(target=wait_for_enter)
-                        input_thread.daemon = True
-                        input_thread.start()
-                        
-                        # Record audio using blocking mode but ignore overflow errors
-                        while not stop_recording.is_set():
-                            try:
-                                # Set exception_on_overflow=False to prevent the error
-                                data = stream.read(self.chunk, exception_on_overflow=False)
-                                frames.append(data)
-                            except Exception as e:
-                                if "overflowed" not in str(e).lower():
-                                    print(f"Error reading from audio stream: {e}")
-                                # Continue recording despite errors
-                        
-                        # Stop and close the stream
-                        stream.stop_stream()
-                        stream.close()
-                        break
-                    except Exception as audio_error:
-                        print(f"Failed with rate {rate} Hz: {audio_error}")
-                
-                if stream is None:
-                    print("Could not open audio stream with any standard rate. Please check your audio configuration.")
-                    return None
+        except Exception as e:
+            print(f"Error with callback recording: {e}")
+            if self.system == 'Darwin':  # For Mac, try the blocking method as fallback
+                print("Falling back to blocking mode...")
+                return self._record_with_blocking(input_device_index, sample_rate)
+            return None
+
+    def _record_with_blocking(self, input_device_index, sample_rate):
+        """Record audio using blocking method (fallback method)"""
+        frames = []
         
+        try:
+            # Try different sample rates if needed
+            rates_to_try = [sample_rate]
+            
+            # Add standard rates as fallbacks
+            if sample_rate not in [48000, 44100, 22050, 11025, 8000]:
+                rates_to_try.extend([48000, 44100, 22050, 11025, 8000])
+            
+            for rate in rates_to_try:
+                try:
+                    stream = self.p.open(
+                        format=self.format,
+                        channels=self.channels,
+                        rate=rate,
+                        input=True,
+                        input_device_index=input_device_index,
+                        frames_per_buffer=self.chunk
+                    )
+                    
+                    print(f"Recording with sample rate: {rate} Hz")
+                    
+                    # Start a non-blocking input thread
+                    stop_recording = threading.Event()
+                    
+                    def wait_for_enter():
+                        input()  # Wait for Enter to stop recording
+                        stop_recording.set()
+                    
+                    input_thread = threading.Thread(target=wait_for_enter)
+                    input_thread.daemon = True
+                    input_thread.start()
+                    
+                    # Record audio using blocking mode but ignore overflow errors
+                    while not stop_recording.is_set():
+                        try:
+                            # Set exception_on_overflow=False to prevent errors
+                            data = stream.read(self.chunk, exception_on_overflow=False)
+                            frames.append(data)
+                        except Exception as e:
+                            if "overflowed" not in str(e).lower():
+                                print(f"Error reading from audio stream: {e}")
+                            continue  # Continue recording despite errors
+                    
+                    # Stop and close the stream
+                    stream.stop_stream()
+                    stream.close()
+                    
+                    # Create and return temporary audio file
+                    return self._save_audio_to_file(frames, rate)
+                    
+                except Exception as audio_error:
+                    print(f"Failed with rate {rate} Hz: {audio_error}")
+                    continue  # Try next sample rate
+            
+            print("Could not open audio stream with any standard rate.")
+            return None
+            
+        except Exception as e:
+            print(f"Error in blocking recording: {e}")
+            return None
+
+    def _save_audio_to_file(self, frames, sample_rate):
+        """Save recorded audio frames to a WAV file"""
+        if not frames:
+            print("No audio frames to save")
+            return None
+            
         # Create a temporary file
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             temp_filename = temp_file.name
@@ -249,7 +315,7 @@ class AIVoiceAgent:
         wf = wave.open(temp_filename, 'wb')
         wf.setnchannels(self.channels)
         wf.setsampwidth(self.p.get_sample_size(self.format))
-        wf.setframerate(default_rate)  # Use the actual rate we recorded with
+        wf.setframerate(sample_rate)
         wf.writeframes(b''.join(frames))
         wf.close()
         
@@ -258,6 +324,10 @@ class AIVoiceAgent:
 
     def transcribe_audio(self, audio_file):
         """Transcribe the recorded audio file"""
+        if not audio_file:
+            print("No audio file to transcribe")
+            return ""
+            
         print("Transcribing audio...")
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(audio_file)
