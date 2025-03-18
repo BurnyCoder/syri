@@ -1,0 +1,4 @@
+assemblyai[extras]>=0.21.0
+ollama>=0.1.20
+elevenlabs>=0.2.24
+python-dotenv>=1.0.0 

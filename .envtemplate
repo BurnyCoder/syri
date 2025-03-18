@@ -1,0 +1,10 @@
+# API Keys for Syri Voice Assistant
+# Rename this file to .env and add your actual API keys
+
+# AssemblyAI API Key for speech-to-text
+# Get yours at: https://www.assemblyai.com
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
+
+# ElevenLabs API Key for text-to-speech
+# Get yours at: https://www.elevenlabs.io
+ELEVENLABS_API_KEY=your_elevenlabs_api_key_here 
