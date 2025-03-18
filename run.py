@@ -8,7 +8,7 @@ It imports the AIVoiceAgent from syri_agent.py and handles setup and error condi
 import os
 import time
 import sys
-from src.syri_agent import AIVoiceAgent
+from src.syri_agent_simpler import AIVoiceAgent
 
 def display_welcome():
     """Display welcome message and instructions."""
