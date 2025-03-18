@@ -1,9 +1,9 @@
 import assemblyai as aai
 from elevenlabs.client import ElevenLabs
 from elevenlabs import stream
-import ollama
 import os
 from dotenv import load_dotenv
+from src.portkey import claude37sonnet
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,12 +14,18 @@ class AIVoiceAgent:
         # Get API keys from environment variables
         assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
         elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+        portkey_api_key = os.getenv("PORTKEY_API_KEY")
+        portkey_virtual_key = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
         
         # Check if API keys are available
         if not assemblyai_api_key:
             raise ValueError("AssemblyAI API key not found. Please set ASSEMBLYAI_API_KEY in your .env file")
         if not elevenlabs_api_key:
             raise ValueError("ElevenLabs API key not found. Please set ELEVENLABS_API_KEY in your .env file")
+        if not portkey_api_key:
+            raise ValueError("Portkey API key not found. Please set PORTKEY_API_KEY in your .env file")
+        if not portkey_virtual_key:
+            raise ValueError("Portkey Virtual Key not found. Please set PORTKEY_VIRTUAL_KEY_ANTHROPIC in your .env file")
             
         aai.settings.api_key = assemblyai_api_key
         self.client = ElevenLabs(
@@ -29,7 +35,7 @@ class AIVoiceAgent:
         self.transcriber = None
 
         self.full_transcript = [
-            {"role": "system", "content": "You are a language model called R1 created by DeepSeek, answer the questions being asked in less than 300 characters."},
+            {"role": "system", "content": "You are a helpful AI assistant called Syri. Provide concise, friendly responses under 300 characters."},
         ]
 
     def start_transcription(self):
@@ -76,29 +82,47 @@ class AIVoiceAgent:
         self.stop_transcription()
 
         self.full_transcript.append({"role": "user", "content": transcript.text})
-        print(f"\nUser:{transcript.text}", end="\r\n")
+        print(f"\nUser: {transcript.text}", end="\r\n")
 
-        ollama_stream = ollama.chat(
-            model="deepseek-r1:7b",
-            messages=self.full_transcript,
-            stream=True,
+        print("Claude 3.7 Sonnet:", end="\r\n")
+        
+        # Prepare messages in the format expected by Claude API
+        messages = []
+        for message in self.full_transcript:
+            messages.append({"role": message["role"], "content": message["content"]})
+        
+        from portkey_ai import Portkey
+
+        # Initialize Portkey client
+        portkey = Portkey(
+            api_key=os.getenv("PORTKEY_API_KEY"),
+            virtual_key=os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
+        )
+        
+        # Get response from Claude 3.7 Sonnet
+        response = portkey.chat.completions.create(
+            messages=messages,
+            model="claude-3-7-sonnet-latest",
+            stream=True
         )
 
-        print("DeepSeek R1:", end="\r\n")
         text_buffer = ""
         full_text = ""
-        for chunk in ollama_stream:
-            text_buffer += chunk['message']['content']
-            if text_buffer.endswith('.'):
-                audio_stream = self.client.generate(
-                    text=text_buffer,
-                    model="eleven_turbo_v2",
-                    stream=True
-                )
-                print(text_buffer, end="\n", flush=True)
-                stream(audio_stream)
-                full_text += text_buffer
-                text_buffer = ""
+        
+        # Process the streaming response
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                text_buffer += chunk.choices[0].delta.content
+                if text_buffer.endswith('.') or text_buffer.endswith('!') or text_buffer.endswith('?'):
+                    audio_stream = self.client.generate(
+                        text=text_buffer,
+                        model="eleven_turbo_v2",
+                        stream=True
+                    )
+                    print(text_buffer, end="\n", flush=True)
+                    stream(audio_stream)
+                    full_text += text_buffer
+                    text_buffer = ""
 
         if text_buffer:
             audio_stream = self.client.generate(
