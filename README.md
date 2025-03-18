@@ -2,10 +2,10 @@
 
 An open-source AI voice assistant that uses:
 - AssemblyAI for real-time speech-to-text
-- DeepSeek R1 for AI response generation
+- Claude 3.7 Sonnet for AI response generation
 - ElevenLabs for text-to-speech
 
-This project enables a fully conversational AI experience similar to Siri, but using open models and APIs.
+This project enables a fully conversational AI experience similar to Siri, but using powerful AI models and APIs.
 
 ## Setup Instructions
 
@@ -14,15 +14,13 @@ This project enables a fully conversational AI experience similar to Siri, but u
 1. **API Keys:**
    - Sign up for a free [AssemblyAI API Key](https://www.assemblyai.com)
    - Sign up for [ElevenLabs](https://www.elevenlabs.io) to get an API key
+   - Sign up for [Portkey](https://portkey.ai) to get API keys for Claude 3.7 Sonnet
 
-2. **Install Ollama:**
-   - Download from [Ollama's website](https://ollama.com)
-
-3. **Install PortAudio** (required for real-time transcription):
+2. **Install PortAudio** (required for real-time transcription):
    - Debian/Ubuntu: `apt install portaudio19-dev`
    - MacOS: `brew install portaudio`
 
-4. **For MacOS users only:** Install MPV for audio streaming
+3. **For MacOS users only:** Install MPV for audio streaming
    - `brew install mpv`
 
 ### Step 2: Install Python Dependencies
@@ -31,13 +29,7 @@ This project enables a fully conversational AI experience similar to Siri, but u
 pip install -r requirements.txt
 ```
 
-### Step 3: Download the AI Model
-
-```bash
-ollama pull deepseek-r1:7b
-```
-
-### Step 4: Configure Environment Variables
+### Step 3: Configure Environment Variables
 
 1. Copy the template file to create your own environment file:
    ```bash
@@ -48,6 +40,8 @@ ollama pull deepseek-r1:7b
    ```
    ASSEMBLYAI_API_KEY=your_actual_assemblyai_key_here
    ELEVENLABS_API_KEY=your_actual_elevenlabs_key_here
+   PORTKEY_API_KEY=your_actual_portkey_key_here
+   PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_actual_portkey_virtual_key_here
    ```
 
 ## Usage
@@ -65,7 +59,7 @@ This script performs pre-checks to ensure all requirements are met and provides 
 ### Method 2: Direct execution
 
 ```bash
-python syri_agent.py
+python -m src.syri_agent
 ```
 
 With either method, speak into your microphone when prompted, and the AI will respond both in text (console) and through speech.
@@ -73,7 +67,7 @@ With either method, speak into your microphone when prompted, and the AI will re
 ## How It Works
 
 1. **Real-Time Transcription:** Your speech is captured and converted to text using AssemblyAI
-2. **AI Processing:** The text is sent to DeepSeek R1 via Ollama for processing
+2. **AI Processing:** The text is sent to Claude 3.7 Sonnet via Portkey for processing
 3. **Voice Synthesis:** The AI's response is converted to speech using ElevenLabs
 4. **Streaming:** The audio response is streamed back to you in real-time
 
