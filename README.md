@@ -1,7 +1,7 @@
 # Syri - AI Voice Assistant
 
 An open-source AI voice assistant that uses:
-- AssemblyAI for real-time speech-to-text
+- AssemblyAI for speech-to-text
 - Claude 3.7 Sonnet for AI response generation
 - ElevenLabs for text-to-speech
 
@@ -16,7 +16,7 @@ This project enables a fully conversational AI experience similar to Siri, but u
    - Sign up for [ElevenLabs](https://www.elevenlabs.io) to get an API key
    - Sign up for [Portkey](https://portkey.ai) to get API keys for Claude 3.7 Sonnet
 
-2. **Install PortAudio** (required for real-time transcription):
+2. **Install PortAudio** (required for audio recording):
    - Debian/Ubuntu: `apt install portaudio19-dev`
    - MacOS: `brew install portaudio`
 
@@ -62,14 +62,19 @@ This script performs pre-checks to ensure all requirements are met and provides 
 python -m src.syri_agent
 ```
 
-With either method, speak into your microphone when prompted, and the AI will respond both in text (console) and through speech.
+With either method:
+1. Press Enter to start recording
+2. Speak into your microphone
+3. Press Enter again when you've finished speaking
+4. The AI will transcribe your speech, process it, and respond both in text (console) and through speech
 
 ## How It Works
 
-1. **Real-Time Transcription:** Your speech is captured and converted to text using AssemblyAI
-2. **AI Processing:** The text is sent to Claude 3.7 Sonnet via Portkey for processing
-3. **Voice Synthesis:** The AI's response is converted to speech using ElevenLabs
-4. **Streaming:** The audio response is streamed back to you in real-time
+1. **Audio Recording:** Press Enter to start recording, speak, and press Enter again to stop
+2. **Transcription:** Your speech is converted to text using AssemblyAI's transcription API
+3. **AI Processing:** The text is sent to Claude 3.7 Sonnet via Portkey for processing
+4. **Voice Synthesis:** The AI's response is converted to speech using ElevenLabs
+5. **Streaming:** The audio response is streamed back to you
 
 ## License
 

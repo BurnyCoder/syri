@@ -29,17 +29,13 @@ def main():
 
     try:
         print("\nStarting voice assistant...\n")
-        print("Speak into your microphone after 'Real-time transcription:' appears.")
+        print("Press Enter to start recording, speak, then press Enter again when done.")
         print("Press Ctrl+C to exit.")
         time.sleep(1)
         
         # Create and start the voice agent
         agent = AIVoiceAgent()
-        agent.start_transcription()
-        
-        # Keep the program running
-        while True:
-            time.sleep(1)
+        agent.start_session()
             
     except KeyboardInterrupt:
         print("\n\nGracefully shutting down. Goodbye! 👋")
