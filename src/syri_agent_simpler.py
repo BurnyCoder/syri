@@ -349,32 +349,42 @@ class AIVoiceAgent:
         # Get response from Claude 3.7 Sonnet using the full conversation history
         response_text = claude37sonnet(self.full_transcript)
         
-        # Break the response into sentences for streaming audio
-        sentences = []
-        temp = ""
-        for char in response_text:
-            temp += char
-            if char in ['.', '!', '?'] and len(temp.strip()) > 0:
-                sentences.append(temp)
-                temp = ""
+        # Stream the entire response at once
+        audio_stream = elevenlabs.generate(
+            text=response_text,
+            model="eleven_turbo_v2",
+            stream=True
+        )
+        print(response_text, flush=True)
+        stream(audio_stream)
         
-        if temp:  # Add any remaining text
-            sentences.append(temp)
-        
-        full_text = ""
-        # Process each sentence
-        for sentence in sentences:
-            audio_stream = elevenlabs.generate(
-                text=sentence,
-                model="eleven_turbo_v2",
-                stream=True
-            )
-            print(sentence, end="", flush=True)
-            stream(audio_stream)
-            full_text += sentence
+        # # Break the response into sentences for streaming audio - COMMENTED OUT IMPLEMENTATION
+        # sentences = []
+        # temp = ""
+        # for char in response_text:
+        #     temp += char
+        #     if char in ['.', '!', '?'] and len(temp.strip()) > 0:
+        #         sentences.append(temp)
+        #         temp = ""
+        # 
+        # if temp:  # Add any remaining text
+        #     sentences.append(temp)
+        # 
+        # full_text = ""
+        # # Process each sentence
+        # for sentence in sentences:
+        #     audio_stream = elevenlabs.generate(
+        #         text=sentence,
+        #         model="eleven_turbo_v2",
+        #         stream=True
+        #     )
+        #     print(sentence, end="", flush=True)
+        #     stream(audio_stream)
+        #     full_text += sentence
         
         print()  # Add a newline after response
-        self.full_transcript.append({"role": "assistant", "content": full_text})
+        # Use response_text directly instead of constructed full_text
+        self.full_transcript.append({"role": "assistant", "content": response_text})
 
     def start_session(self):
         """Start the voice assistant session"""
