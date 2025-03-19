@@ -350,7 +350,8 @@ class AIVoiceAgent:
         
         # Instead of using Claude 3.7 Sonnet directly, use the web agent
         # Use just the current transcript as the prompt to the web agent
-        response_text = run(prompt=transcript_text)
+        # Pass cleanup_after=False to keep Chrome running between interactions
+        response_text = run(prompt=transcript_text, cleanup_after=False)
         
         # Stream the entire response at once
         audio_stream = elevenlabs.generate(

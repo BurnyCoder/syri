@@ -9,6 +9,7 @@ import os
 import time
 import sys
 from src.syri_agent_simpler import AIVoiceAgent
+from src.browser_agent.chrome_manager import cleanup
 
 def display_welcome():
     """Display welcome message and instructions."""
@@ -43,6 +44,9 @@ def main():
         print(f"\nError: {e}")
         print("The assistant has encountered an error and needs to exit.")
         return 1
+    finally:
+        # Ensure Chrome is properly cleaned up when the script exits
+        cleanup(exit_process=False)
     
     return 0
 
