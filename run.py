@@ -17,7 +17,7 @@ def display_welcome():
     print("=" * 50)
     print("\nThis assistant uses:")
     print("  • AssemblyAI for speech-to-text")
-    print("  • Claude 3.7 Sonnet for AI processing")
+    print("  • Web browser agent (with Claude 3.7 Sonnet) for AI processing")
     print("  • ElevenLabs for text-to-speech")
     print("\nStarting up...\n")
     time.sleep(1)

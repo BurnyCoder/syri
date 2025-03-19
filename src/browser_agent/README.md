@@ -28,27 +28,6 @@ This project leverages browser-use and Anthropic Claude via Portkey API gateway 
 - Chrome or Chromium browser
 - API keys for Anthropic Claude (via Portkey)
 
-## Setup
-
-1. Make sure you have all dependencies installed:
-   ```
-   pip install -r requirements.txt
-   ```
-
-2. Copy the environment template to create your own `.env` file:
-   ```
-   cp .envtemplate .env
-   ```
-
-3. Edit the `.env` file to add your API keys:
-   ```
-   PORTKEY_API_BASE=your_portkey_api_base_here
-   PORTKEY_API_KEY=your_portkey_api_key_here
-   PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_portkey_virtual_key_here
-   # Optional: You can customize the agent's behavior by setting a custom prompt
-   WEB_AGENT_PROMPT="Your custom prompt here"
-   ```
-
 ## Running the Agent
 
 ### Basic Usage
@@ -57,20 +36,6 @@ Run the agent with the default prompt and starting URL (Google):
 
 ```
 python run_web_agent.py
-```
-
-### Interactive Mode
-
-Run the agent in interactive mode to enter your task at runtime:
-
-```
-python run_web_agent.py -i
-```
-
-or
-
-```
-python run_web_agent.py --interactive --url "https://www.wikipedia.org"
 ```
 
 The agent will prompt you to enter your task and then execute it.
@@ -96,17 +61,3 @@ For more control, you can start the Chrome browser separately:
    ```
    python gmail_agent.py  # Using the original file
    ```
-
-## Examples
-
-Check the `.envtemplate` file for example prompts that show how to:
-- Unsubscribe from Gmail emails
-- Summarize recent emails
-- Research and compare products
-
-## Customization
-
-You can customize the agent's behavior by:
-1. Editing the default prompt in `.env`
-2. Providing a custom prompt via command line
-3. Creating your own implementations of specific web automation tasks

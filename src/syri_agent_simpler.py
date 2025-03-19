@@ -5,7 +5,7 @@ import os
 import sys
 import platform
 from dotenv import load_dotenv
-from src.portkey import claude37sonnet
+from src.browser_agent.run_web_agent import run
 import time
 import tempfile
 import wave
@@ -62,8 +62,10 @@ class AIVoiceAgent:
         # Restore stderr
         self._restore_stderr()
 
+        # Initialize conversation history - no longer needed for web agent
+        # as we're not passing conversation history, but keep for record-keeping
         self.full_transcript = [
-            {"role": "system", "content": "You are a helpful AI assistant called Syri. Provide concise, friendly responses under 300 characters."},
+            {"role": "system", "content": "You are a helpful web browsing assistant called Syri. Provide concise, friendly responses based on your web browsing capabilities."},
         ]
     
     def _suppress_audio_errors(self):
@@ -344,10 +346,11 @@ class AIVoiceAgent:
         self.full_transcript.append({"role": "user", "content": transcript_text})
         print(f"\nUser: {transcript_text}")
 
-        print("\nClaude 3.7 Sonnet:", flush=True)
+        print("\nWeb Agent Response:", flush=True)
         
-        # Get response from Claude 3.7 Sonnet using the full conversation history
-        response_text = claude37sonnet(self.full_transcript)
+        # Instead of using Claude 3.7 Sonnet directly, use the web agent
+        # Use just the current transcript as the prompt to the web agent
+        response_text = run(prompt=transcript_text)
         
         # Stream the entire response at once
         audio_stream = elevenlabs.generate(
@@ -386,9 +389,39 @@ class AIVoiceAgent:
         # Use response_text directly instead of constructed full_text
         self.full_transcript.append({"role": "assistant", "content": response_text})
 
+    def _check_chrome_installed(self):
+        """Check if Chrome is installed and available"""
+        import shutil
+        
+        chrome_paths = {
+            'Darwin': ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
+            'Linux': ['google-chrome', 'chrome', 'chromium', 'chromium-browser'],
+            'Windows': ['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 
+                       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe']
+        }
+        
+        if self.system in chrome_paths:
+            if self.system == 'Darwin' or self.system == 'Windows':  # Direct path check for Mac/Windows
+                for path in chrome_paths[self.system]:
+                    if os.path.exists(path):
+                        return True
+            else:  # Linux - use which to find in PATH
+                for browser in chrome_paths[self.system]:
+                    if shutil.which(browser):
+                        return True
+                        
+        print("Warning: Chrome browser not found. The web agent requires Chrome to be installed.")
+        return False
+
     def start_session(self):
         """Start the voice assistant session"""
         print("Syri Voice Assistant started. Press Enter to speak, then Enter again when done.")
+        
+        # Check if Chrome is installed
+        if not self._check_chrome_installed():
+            print("Chrome is required for the web agent functionality.")
+            print("Please install Chrome and try again.")
+            return
         
         try:
             while True:
