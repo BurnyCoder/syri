@@ -32,10 +32,13 @@ class WebAgent:
         self.portkey_api_key = os.getenv("PORTKEY_API_KEY")
         self.portkey_virtual_key_anthropic = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
         
-        # Default general-purpose web agent prompt
-        self.default_prompt = os.getenv("WEB_AGENT_PROMPT", "")
-        # Set the prompt if provided during initialization
-        self.prompt = prompt if prompt is not None else self.default_prompt
+        # Additional instructions to append to the web agent prompt
+        self.additional_prompt = os.getenv("WEB_AGENT_PROMPT", "")
+        # Set the prompt if provided during initialization, or use the additional prompt
+        if prompt is not None:
+            self.prompt = prompt + " " + self.additional_prompt if self.additional_prompt else prompt
+        else:
+            self.prompt = self.additional_prompt
 
     async def run(self, prompt=None):
         """Run the web agent with the given prompt or default prompt"""

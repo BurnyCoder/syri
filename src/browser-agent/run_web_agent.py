@@ -7,6 +7,7 @@ from chrome_manager import start_chrome, cleanup
 
 # Load environment variables
 load_dotenv()
+
 def run(prompt=None, url=None):
     """Main function to run the web automation agent"""
     
@@ -26,11 +27,13 @@ def run(prompt=None, url=None):
         
         # Create and run the web agent directly
         web_agent = WebAgent()
-        return asyncio.run(web_agent.run(prompt))
+        result = asyncio.run(web_agent.run(prompt))
+        return result
     
     finally:
         # Ensure Chrome is shut down properly
         cleanup()
 
 if __name__ == "__main__":
-    run("Find cutest cats.")
+    # result = run("Summarize AI according to wiki.")
+    result = run("Tell me a joke, don't search or click anything.")
