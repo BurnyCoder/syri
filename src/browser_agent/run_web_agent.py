@@ -2,8 +2,8 @@
 import asyncio
 import argparse
 from dotenv import load_dotenv
-from web_agent import WebAgent
-from chrome_manager import start_chrome, cleanup
+from .web_agent import WebAgent
+from .chrome_manager import start_chrome, cleanup
 
 # Load environment variables
 load_dotenv()
