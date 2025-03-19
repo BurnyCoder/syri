@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import os
 import asyncio
 import argparse
 from dotenv import load_dotenv
@@ -19,18 +18,6 @@ def run(prompt=None, url=None):
     args = parser.parse_args()
     
     try:
-        # Get user prompt
-        user_prompt = prompt
-        
-        # If no prompt parameter was passed, check command line args
-        if user_prompt is None:
-            if not args.prompt:
-                print("\nPlease describe the web task you want the agent to perform:")
-                user_prompt = input("> ").strip()
-            else:
-                # Use command line prompt if provided
-                user_prompt = args.prompt
-        
         # Use URL from parameter if provided, otherwise from command line args
         start_url = url if url is not None else args.url
         
@@ -38,8 +25,8 @@ def run(prompt=None, url=None):
         start_chrome(start_url=start_url)
         
         # Create and run the web agent directly
-        web_agent = WebAgent(user_prompt)
-        return asyncio.run(web_agent.run())
+        web_agent = WebAgent()
+        return asyncio.run(web_agent.run(prompt))
     
     finally:
         # Ensure Chrome is shut down properly
