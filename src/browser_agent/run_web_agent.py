@@ -31,8 +31,9 @@ def run(prompt=None, url=None):
         return result
     
     finally:
-        # Ensure Chrome is shut down properly
-        cleanup()
+        # Ensure Chrome is shut down properly but don't exit the process
+        # This allows external scripts to call the run function without breaking
+        cleanup(exit_process=False)
 
 if __name__ == "__main__":
     # result = run("Summarize AI according to wiki.")

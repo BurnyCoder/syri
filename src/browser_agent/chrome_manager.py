@@ -62,8 +62,14 @@ def start_chrome(start_url="https://google.com"):
     print(f"Waiting for Chrome to start and load {start_url}...")
     time.sleep(5)
 
-def cleanup():
-    """Cleanup function to kill Chrome process"""
+def cleanup(exit_process=True):
+    """
+    Cleanup function to kill Chrome process
+    
+    Args:
+        exit_process (bool): Whether to exit the Python process after cleanup.
+                            Set to False when called programmatically.
+    """
     global chrome_process
     if chrome_process:
         print("Shutting down Chrome...")
@@ -72,7 +78,9 @@ def cleanup():
             chrome_process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             chrome_process.kill() 
-    sys.exit(0)
+    
+    if exit_process:
+        sys.exit(0)
     
 if __name__ == "__main__":
     start_chrome()
