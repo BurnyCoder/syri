@@ -33,27 +33,7 @@ class WebAgent:
         self.portkey_virtual_key_anthropic = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
         
         # Default general-purpose web agent prompt
-        self.default_prompt = os.getenv("WEB_AGENT_PROMPT", """
-You are a helpful web automation assistant. You can navigate websites, interact with elements, 
-and perform tasks on behalf of the user. Follow the user's instructions carefully and use your 
-browser control abilities to complete the requested task.
-
-Guidelines:
-1. Navigate to the requested websites
-2. Interact with elements (click, type, scroll) as needed
-3. Read and extract information when asked
-4. Complete multi-step processes by breaking them down
-5. Log your progress at each significant step
-6. Be thorough and detailed in your actions
-
-Remember to:
-- Look for the most efficient path to complete tasks
-- Handle login forms and authentication when necessary 
-- Handle popups, modals, and other interactive elements
-- Wait for pages to load completely before proceeding
-- Return to previous pages when needed
-- Log any errors or obstacles encountered
-""")
+        self.default_prompt = os.getenv("WEB_AGENT_PROMPT", "")
         # Set the prompt if provided during initialization
         self.prompt = prompt if prompt is not None else self.default_prompt
 
