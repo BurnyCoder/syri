@@ -2,10 +2,10 @@
 
 An open-source AI voice assistant that uses:
 - AssemblyAI for speech-to-text
-- Claude 3.7 Sonnet for AI response generation
+- Web browser-based agent for AI response generation (using Claude 3.7 Sonnet)
 - ElevenLabs for text-to-speech
 
-This project enables a fully conversational AI experience similar to Siri, but using powerful AI models and APIs.
+This project enables a fully conversational AI experience similar to Siri, but using powerful AI models, a web browser agent, and high-quality audio APIs.
 
 ## Setup Instructions
 
@@ -22,6 +22,9 @@ This project enables a fully conversational AI experience similar to Siri, but u
 
 3. **For MacOS users only:** Install MPV for audio streaming
    - `brew install mpv`
+
+4. **Chrome Browser:**
+   - Google Chrome must be installed as the web agent will launch and control Chrome
 
 ### Step 2: Install Python Dependencies
 
@@ -59,7 +62,16 @@ This script performs pre-checks to ensure all requirements are met and provides 
 1. Press Enter to start recording
 2. Speak into your microphone
 3. Press Enter again when you've finished speaking
-4. The AI will transcribe your speech, process it, and respond both in text (console) and through speech
+4. The AI will transcribe your speech, process it through the web agent, and respond both in text (console) and through speech
+
+## How It Works
+
+When you speak to Syri:
+1. Your voice is recorded using PyAudio
+2. The recording is transcribed to text using AssemblyAI
+3. The transcribed text is sent to a web agent that runs Chrome browser automation
+4. The web agent uses Claude 3.7 Sonnet through Portkey to generate responses
+5. The response is converted to speech using ElevenLabs
 
 ## License
 
