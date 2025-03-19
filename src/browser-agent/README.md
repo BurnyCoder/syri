@@ -1,12 +1,26 @@
-# Gmail Unsubscribe Agent
+# Web Agent
 
-This is an automated agent that helps you manage your Gmail inbox by either:
-- Unsubscribing from unwanted emails (default functionality)
-- Summarizing your most recent emails
-
-The agent uses Chrome browser automation and LLM-powered browsing to navigate through Gmail.
+This is a flexible, general-purpose web agent that can perform various tasks on the web based on user prompts. The agent uses Chrome browser automation and LLM-powered browsing to navigate and interact with websites.
 
 This project leverages browser-use and Anthropic Claude via Portkey API gateway using Langchain.
+
+## Features
+
+- Execute any web automation task specified by the user
+- Navigate websites, interact with elements, and extract information
+- Complete multi-step processes by breaking them down
+- Handle login forms, popups, and authentication when necessary
+- Log progress at each significant step
+
+## Example Use Cases
+
+- Unsubscribing from unwanted emails in Gmail
+- Summarizing emails in your inbox
+- Product research and price comparison
+- Filling out forms and applications
+- Data extraction from websites
+- Automated testing of web applications
+- Content creation and publishing
 
 ## Prerequisites
 
@@ -32,36 +46,67 @@ This project leverages browser-use and Anthropic Claude via Portkey API gateway 
    PORTKEY_API_KEY=your_portkey_api_key_here
    PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_portkey_virtual_key_here
    # Optional: You can customize the agent's behavior by setting a custom prompt
-   GMAIL_AGENT_PROMPT="Your custom prompt here"
+   WEB_AGENT_PROMPT="Your custom prompt here"
    ```
 
 ## Running the Agent
 
-There are two ways to run the agent:
+### Basic Usage
 
-### Option 1: Manual two-step process, good for first time
+Run the agent with the default prompt and starting URL (Google):
+
+```
+python run_web_agent.py
+```
+
+### Interactive Mode
+
+Run the agent in interactive mode to enter your task at runtime:
+
+```
+python run_web_agent.py -i
+```
+
+or
+
+```
+python run_web_agent.py --interactive --url "https://www.wikipedia.org"
+```
+
+The agent will prompt you to enter your task and then execute it.
+
+### Custom Instructions
+
+You can provide a custom prompt and starting URL:
+
+```
+python run_web_agent.py --prompt "Your task is to search for recent news about AI and summarize the top 3 articles" --url "https://news.google.com"
+```
+
+### Manual Two-Step Process
+
+For more control, you can start the Chrome browser separately:
 
 1. First, start Chrome with remote debugging enabled:
    ```
    python chrome_manager.py
    ```
-   This will open Chrome to Gmail. You may need to log in to your Gmail account.
 
 2. Once Chrome is running with remote debugging, run the agent:
    ```
-   python gmail_agent.py
+   python gmail_agent.py  # Using the original file
    ```
 
-### Option 2: Using the integrated script (when you're logged in already)
+## Examples
 
-Run the all-in-one script that handles both Chrome startup and the agent:
+Check the `.envtemplate` file for example prompts that show how to:
+- Unsubscribe from Gmail emails
+- Summarize recent emails
+- Research and compare products
 
-```
-python run_gmail_agent.py
-```
+## Customization
 
-This script will:
-- Start Chrome with remote debugging enabled
-- Navigate to Gmail 
-- Run the agent to process your emails
-- Properly clean up when finished or interrupted
+You can customize the agent's behavior by:
+1. Editing the default prompt in `.env`
+2. Providing a custom prompt via command line
+3. Creating your own implementations of specific web automation tasks

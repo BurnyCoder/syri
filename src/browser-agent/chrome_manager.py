@@ -7,8 +7,13 @@ import signal
 # Global variable to track the Chrome process
 chrome_process = None
 
-def start_chrome():
-    """Start Chrome with remote debugging enabled"""
+def start_chrome(start_url="https://google.com"):
+    """
+    Start Chrome with remote debugging enabled
+    
+    Args:
+        start_url (str): The URL to open when Chrome starts. Defaults to Google.
+    """
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
@@ -47,14 +52,14 @@ def start_chrome():
             chrome_bin,
             "--remote-debugging-port=9222",
             "--user-data-dir=/tmp/chrome-debug-profile",
-            "https://gmail.com"
+            start_url
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
     
     # Give Chrome time to start and fully load
-    print("Waiting for Chrome to start...")
+    print(f"Waiting for Chrome to start and load {start_url}...")
     time.sleep(5)
 
 def cleanup():

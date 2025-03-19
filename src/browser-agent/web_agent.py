@@ -17,12 +17,12 @@ controller = Controller()
 
 @controller.action('Log progress')
 def log_progress(message: str) -> str:
-    """Log the progress of the unsubscribe process"""
+    """Log the progress of web tasks"""
     print(f"\n[LOG] {message}")
     return ActionResult(extracted_content="Logged successfully")
 
 
-class GmailAgent:
+class WebAgent:
     def __init__(self, prompt=None):
         # Load environment variables
         load_dotenv()
@@ -32,35 +32,33 @@ class GmailAgent:
         self.portkey_api_key = os.getenv("PORTKEY_API_KEY")
         self.portkey_virtual_key_anthropic = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
         
-        # Default unsubscribe prompt
-        self.default_prompt = os.getenv("GMAIL_AGENT_PROMPT", """
-Your task is to help the user unsubscribe from unwanted emails in Gmail.
+        # Default general-purpose web agent prompt
+        self.default_prompt = os.getenv("WEB_AGENT_PROMPT", """
+You are a helpful web automation assistant. You can navigate websites, interact with elements, 
+and perform tasks on behalf of the user. Follow the user's instructions carefully and use your 
+browser control abilities to complete the requested task.
 
-1. Open gmail.com and log in if necessary
-2. Go through the emails in the inbox one by one
-3. For each email:
-   - Open the email
-   - Look for an "unsubscribe" link somewhere in the email (usually at the bottom)
-   - If an unsubscribe link is found:
-     a. Click on the unsubscribe link
-     b. Complete any unsubscribe process - this might open a new tab or show a dialog
-     c. If it opens a new tab, confirm the unsubscription on that website or page
-     d. Close any new tabs opened during the process and return to Gmail
-     e. Log the name of the sender you've unsubscribed from
-   - If no unsubscribe link is found, just close the email and move to the next one
-4. Continue this process for all visible emails in the inbox
+Guidelines:
+1. Navigate to the requested websites
+2. Interact with elements (click, type, scroll) as needed
+3. Read and extract information when asked
+4. Complete multi-step processes by breaking them down
+5. Log your progress at each significant step
+6. Be thorough and detailed in your actions
 
-Important instructions:
-- Be thorough in finding unsubscribe links - they might be labeled as "manage subscriptions" or similar
-- Look for unsubscribe text in small font at the bottom of emails
-- After unsubscribing, make sure to come back to the Gmail inbox
-- Keep track of which senders you've unsubscribed from
+Remember to:
+- Look for the most efficient path to complete tasks
+- Handle login forms and authentication when necessary 
+- Handle popups, modals, and other interactive elements
+- Wait for pages to load completely before proceeding
+- Return to previous pages when needed
+- Log any errors or obstacles encountered
 """)
         # Set the prompt if provided during initialization
         self.prompt = prompt if prompt is not None else self.default_prompt
 
     async def run(self, prompt=None):
-        """Run the Gmail agent with the given prompt or default prompt"""
+        """Run the web agent with the given prompt or default prompt"""
         # Use the prompt passed to run() method, or the one set during initialization, or the default
         if prompt is not None:
             self.prompt = prompt
@@ -92,12 +90,12 @@ Important instructions:
             controller=controller
         )
         result = await agent.run()
-        # Access the final result's extracted_content which contains the email summaries
+        # Access the final result
         final_answer = result.final_result()
         print(final_answer)
         return final_answer
 
 
 if __name__ == "__main__":
-    gmail_agent = GmailAgent()
-    result = asyncio.run(gmail_agent.run())
+    web_agent = WebAgent()
+    result = asyncio.run(web_agent.run())
