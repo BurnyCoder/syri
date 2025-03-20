@@ -8,7 +8,7 @@ It imports the AIVoiceAgent from syri_agent.py and handles setup and error condi
 import os
 import time
 import sys
-from src.syri_agent_simpler import AIVoiceAgent
+from src.syri_agent_simpler import AIVoiceAgent, TRIGGER_DIR, STATE_FILE
 from src.browser_agent.chrome_manager import start_chrome, cleanup
 
 def display_welcome():
@@ -28,6 +28,10 @@ def main():
     """Main entry point for the voice assistant."""
     display_welcome()
 
+    # Ensure trigger directory exists
+    if not os.path.exists(TRIGGER_DIR):
+        os.makedirs(TRIGGER_DIR)
+
     try:
         # Start Chrome just once at the beginning
         print("Starting Chrome browser...")
@@ -35,8 +39,12 @@ def main():
         print("Chrome browser started and ready.\n")
         
         print("\nStarting voice assistant...\n")
-        print("Press Enter to start recording, speak, then press Enter again when done.")
-        print("Press Ctrl+C to exit.")
+        print("Voice assistant is starting in inactive listening state.")
+        print("Use the following scripts to control the assistant:")
+        print(f"  • ./scripts/start_listening.sh - Start recording")
+        print(f"  • ./scripts/stop_listening.sh - Stop recording and process request")
+        print(f"  • ./scripts/toggle_listening.sh - Toggle between start/stop")
+        print(f"  • ./scripts/stop_server.sh - Shutdown the server")
         time.sleep(1)
         
         # Create and start the voice agent

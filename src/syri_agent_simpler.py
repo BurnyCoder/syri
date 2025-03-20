@@ -16,6 +16,12 @@ import threading
 # Load environment variables from .env file
 load_dotenv()
 
+# Constants for trigger files
+TRIGGER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'triggers')
+START_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'start_listening')
+STOP_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'stop_listening')
+STATE_FILE = os.path.join(TRIGGER_DIR, 'listening_state')
+
 
 class AIVoiceAgent:
     def __init__(self):
@@ -68,6 +74,24 @@ class AIVoiceAgent:
         self.full_transcript = [
             {"role": "system", "content": "You are a helpful web browsing assistant called Syri. Provide concise, friendly responses based on your web browsing capabilities."},
         ]
+        
+        # Ensure trigger directory exists
+        if not os.path.exists(TRIGGER_DIR):
+            os.makedirs(TRIGGER_DIR)
+            
+        # Clear any existing trigger files
+        self._clear_trigger_files()
+    
+    def _clear_trigger_files(self):
+        """Remove any existing trigger files and initialize state"""
+        if os.path.exists(START_TRIGGER_FILE):
+            os.remove(START_TRIGGER_FILE)
+        if os.path.exists(STOP_TRIGGER_FILE):
+            os.remove(STOP_TRIGGER_FILE)
+            
+        # Initialize state to inactive when server starts
+        with open(STATE_FILE, 'w') as f:
+            f.write("inactive")
     
     def _suppress_audio_errors(self):
         """Suppress error messages from audio backends in a platform-appropriate way"""
@@ -96,11 +120,11 @@ class AIVoiceAgent:
             sys.stderr = self.old_stderr_target
 
     def record_audio(self):
-        """Record audio until the user presses Enter"""
-        print("\nPress Enter to start recording...")
-        input()  # Wait for Enter to start recording
+        """Record audio until a stop trigger file is created"""
+        print("\nWaiting for start trigger...")
+        self._wait_for_start_trigger()
         
-        print("Recording... Press Enter to stop.")
+        print("Recording... Create a stop trigger file to stop.")
         
         # Find the correct input device index and optimal configuration
         # based on detected operating system
@@ -174,6 +198,22 @@ class AIVoiceAgent:
         
         return input_device_index
 
+    def _wait_for_start_trigger(self):
+        """Wait for a start trigger file to be created"""
+        while not os.path.exists(START_TRIGGER_FILE):
+            time.sleep(0.5)
+        
+        # Remove the start trigger file once detected
+        os.remove(START_TRIGGER_FILE)
+        
+    def _check_stop_trigger(self):
+        """Check if a stop trigger file exists"""
+        if os.path.exists(STOP_TRIGGER_FILE):
+            # Remove the stop trigger file once detected
+            os.remove(STOP_TRIGGER_FILE)
+            return True
+        return False
+
     def _record_with_callback(self, input_device_index, sample_rate):
         """Record audio using callback method (preferred for Mac)"""
         frames = []
@@ -199,16 +239,19 @@ class AIVoiceAgent:
             
             stream.start_stream()
             
-            # Start a non-blocking input thread
+            # Start a thread to check for stop trigger
             stop_recording = threading.Event()
             
-            def wait_for_enter():
-                input()  # Wait for Enter to stop recording
-                stop_recording.set()
+            def check_for_stop():
+                while not stop_recording.is_set():
+                    if self._check_stop_trigger():
+                        stop_recording.set()
+                        break
+                    time.sleep(0.5)
             
-            input_thread = threading.Thread(target=wait_for_enter)
-            input_thread.daemon = True
-            input_thread.start()
+            stop_thread = threading.Thread(target=check_for_stop)
+            stop_thread.daemon = True
+            stop_thread.start()
             
             # Wait for stop signal
             while stream.is_active() and not stop_recording.is_set():
@@ -248,11 +291,13 @@ class AIVoiceAgent:
             rates_to_try = [sample_rate]
             
             # Add standard rates as fallbacks
-            if sample_rate not in [48000, 44100, 22050, 11025, 8000]:
-                rates_to_try.extend([48000, 44100, 22050, 11025, 8000])
+            if sample_rate not in [44100, 48000, 16000]:
+                rates_to_try.extend([44100, 48000, 16000])
             
+            # Try each rate until one works
             for rate in rates_to_try:
                 try:
+                    # Open stream with the current rate
                     stream = self.p.open(
                         format=self.format,
                         channels=self.channels,
@@ -264,16 +309,19 @@ class AIVoiceAgent:
                     
                     print(f"Recording with sample rate: {rate} Hz")
                     
-                    # Start a non-blocking input thread
+                    # Start a thread to check for stop trigger
                     stop_recording = threading.Event()
                     
-                    def wait_for_enter():
-                        input()  # Wait for Enter to stop recording
-                        stop_recording.set()
+                    def check_for_stop():
+                        while not stop_recording.is_set():
+                            if self._check_stop_trigger():
+                                stop_recording.set()
+                                break
+                            time.sleep(0.5)
                     
-                    input_thread = threading.Thread(target=wait_for_enter)
-                    input_thread.daemon = True
-                    input_thread.start()
+                    stop_thread = threading.Thread(target=check_for_stop)
+                    stop_thread.daemon = True
+                    stop_thread.start()
                     
                     # Record audio using blocking mode but ignore overflow errors
                     while not stop_recording.is_set():
@@ -290,18 +338,28 @@ class AIVoiceAgent:
                     stream.stop_stream()
                     stream.close()
                     
-                    # Create and return temporary audio file
-                    return self._save_audio_to_file(frames, rate)
+                    # If we got here without errors, break the rate-trying loop
+                    break
                     
-                except Exception as audio_error:
-                    print(f"Failed with rate {rate} Hz: {audio_error}")
-                    continue  # Try next sample rate
+                except Exception as e:
+                    print(f"Failed with rate {rate} Hz: {e}")
+                    if rate == rates_to_try[-1]:  # If this was the last rate to try
+                        print("All sample rates failed")
+                        return None
+                    else:
+                        print(f"Trying next sample rate...")
+                        continue
             
-            print("Could not open audio stream with any standard rate.")
-            return None
+            # Check if we captured any audio
+            if not frames:
+                print("No audio captured with blocking method")
+                return None
+            
+            # Create and return temporary audio file
+            return self._save_audio_to_file(frames, rate)
             
         except Exception as e:
-            print(f"Error in blocking recording: {e}")
+            print(f"Error with blocking recording: {e}")
             return None
 
     def _save_audio_to_file(self, frames, sample_rate):
@@ -358,7 +416,7 @@ class AIVoiceAgent:
         # Stream the entire response at once
         audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
             text=response_text,
-            voice_id="Charlie",
+            voice_id="IKne3meq5aSn9XLyUdCD", # charlie
             model_id="eleven_multilingual_v2"
         )
         print(response_text, flush=True)
