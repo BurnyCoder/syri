@@ -5,19 +5,19 @@ import os
 import sys
 import platform
 from dotenv import load_dotenv
-from src.browser_agent.run_web_agent import run
 import time
 import tempfile
 import wave
 import pyaudio
 import threading
+import asyncio
 
 # Load environment variables from .env file
 load_dotenv()
 
 
 class AIVoiceAgent:
-    def __init__(self):
+    def __init__(self, web_agent=None):
         # Get API keys from environment variables
         assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
         elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
@@ -37,6 +37,9 @@ class AIVoiceAgent:
         aai.settings.api_key = assemblyai_api_key
         # Set ElevenLabs API key
         set_api_key(elevenlabs_api_key)
+        
+        # Store web_agent instance
+        self.web_agent = web_agent
         
         # Detect operating system
         self.system = platform.system()
@@ -348,11 +351,8 @@ class AIVoiceAgent:
 
         print("\nWeb Agent Response:", flush=True)
         
-        # Instead of using Claude 3.7 Sonnet directly, use the web agent
-        # Use just the current transcript as the prompt to the web agent
-        # Pass cleanup_after=False to keep Chrome running between interactions
-        # Pass skip_chrome_start=True since Chrome is already started in run.py
-        response_text = run(prompt=transcript_text, cleanup_after=False, skip_chrome_start=True)
+        # Use the web_agent instance that was passed in when initializing
+        response_text = asyncio.run(self.web_agent.run(transcript_text))
         
         # Stream the entire response at once
         audio_stream = elevenlabs.generate(

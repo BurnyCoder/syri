@@ -23,7 +23,7 @@ def log_progress(message: str) -> str:
 
 
 class WebAgent:
-    def __init__(self, prompt=None):
+    def __init__(self):
         # Load environment variables
         load_dotenv()
         
@@ -34,17 +34,6 @@ class WebAgent:
         
         # Additional instructions to append to the web agent prompt
         self.additional_prompt = os.getenv("WEB_AGENT_PROMPT", "")
-        # Set the prompt if provided during initialization, or use the additional prompt
-        if prompt is not None:
-            self.prompt = prompt + " " + self.additional_prompt if self.additional_prompt else prompt
-        else:
-            self.prompt = self.additional_prompt
-
-    async def run(self, prompt=None):
-        """Run the web agent with the given prompt or default prompt"""
-        # Use the prompt passed to run() method, or the one set during initialization, or the default
-        if prompt is not None:
-            self.prompt = prompt
             
         # Set up Portkey headers for Anthropic/Claude
         portkey_headers = createHeaders(
@@ -61,24 +50,46 @@ class WebAgent:
             default_headers=portkey_headers
         )
         
-        agent = Agent(
+        # Initialize the agent once during instantiation with empty task
+        self.agent = Agent(
             browser=Browser(
                 config=BrowserConfig(
                     disable_security=True,
                     cdp_url="http://localhost:9222",
                 ),
             ),
-            task=self.prompt,
             llm=llm,  # Use the Portkey-configured Claude LLM
             controller=controller
         )
-        result = await agent.run()
+        self.initialized = False
+
+    async def run(self, prompt=None):
+        """Run the web agent with the given prompt or current task"""
+        # If prompt is provided, add it as a new task
+        if prompt is not None:
+            # Apply additional instructions if available
+            full_prompt = prompt + " " + self.additional_prompt if self.additional_prompt else prompt
+            
+            if not self.initialized:
+                # For the first task, set it directly
+                self.agent.task = full_prompt
+                self.initialized = True
+            else:
+                # For subsequent tasks, use add_new_task
+                self.agent.add_new_task(full_prompt)
+                
+        result = await self.agent.run()
+        
         # Access the final result
         final_answer = result.final_result()
         print(final_answer)
         return final_answer
-
+        
 
 if __name__ == "__main__":
-    web_agent = WebAgent()
-    result = asyncio.run(web_agent.run())
+    async def main():
+        web_agent = WebAgent()
+        
+        result = await web_agent.run("Find information about browser automation tools")
+        
+    asyncio.run(main())

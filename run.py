@@ -10,6 +10,7 @@ import time
 import sys
 from src.syri_agent_simpler import AIVoiceAgent
 from src.browser_agent.chrome_manager import start_chrome, cleanup
+from src.browser_agent.web_agent import WebAgent
 
 def display_welcome():
     """Display welcome message and instructions."""
@@ -34,13 +35,17 @@ def main():
         start_chrome()
         print("Chrome browser started and ready.\n")
         
+        # Initialize web agent just once
+        print("Initializing web and voice agent...")
+        web_agent = WebAgent()
+        agent = AIVoiceAgent(web_agent=web_agent)
+        print("Web and voice agent initialized and ready.\n")
+        
         print("\nStarting voice assistant...\n")
         print("Press Enter to start recording, speak, then press Enter again when done.")
         print("Press Ctrl+C to exit.")
-        time.sleep(1)
         
-        # Create and start the voice agent
-        agent = AIVoiceAgent()
+        # Create and start the voice agent, passing the web_agent instance
         agent.start_session()
             
     except KeyboardInterrupt:
