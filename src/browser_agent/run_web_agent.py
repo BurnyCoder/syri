@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-import asyncio
 import argparse
 from dotenv import load_dotenv
 from .web_agent import WebAgent
-from .chrome_manager import start_chrome, cleanup
 
 # Load environment variables
 load_dotenv()
@@ -32,21 +30,24 @@ def run(prompt=None, url=None, cleanup_after=False, skip_chrome_start=False):
         # Use URL from parameter if provided, otherwise from command line args
         start_url = url if url is not None else args.url
         
-        # Only start Chrome if not skipping this step
-        if not skip_chrome_start:
-            # Start Chrome with remote debugging and the specified URL
-            start_chrome(start_url=start_url)
+        # Create the web agent with the initial task if provided
+        web_agent = WebAgent(initial_task=prompt if prompt else "")
         
-        # Create and run the web agent directly
-        web_agent = WebAgent()
-        result = asyncio.run(web_agent.run(prompt))
+        # If skip_chrome_start is True, don't start Chrome manually
+        if not skip_chrome_start:
+            # Setup browser with the specified URL
+            web_agent.setup_browser(start_url=start_url)
+        
+        # Run the agent with the prompt
+        result = web_agent.run(prompt if prompt else "Summarize my last gmail")
         return result
     
     finally:
         # Only clean up Chrome if specifically requested
-        if cleanup_after:
-            cleanup(exit_process=False)
+        if cleanup_after and web_agent is not None:
+            web_agent.cleanup()
 
 if __name__ == "__main__":
     # result = run("Summarize AI according to wiki.")
     result = run("Tell me a joke, don't search or click anything.", cleanup_after=True)
+    print(result)

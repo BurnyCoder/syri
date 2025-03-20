@@ -6,6 +6,8 @@ import time
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from portkey_ai import createHeaders
 
 from browser_use import Agent, BrowserConfig, Browser
 from browser_use.agent.views import ActionResult
@@ -30,11 +32,26 @@ class BrowserAgent:
         """Initialize the BrowserAgent with configuration."""
         self.task = initial_task
         
-        # Initialize the model
-        self.llm = ChatOpenAI(
-            model='gpt-4o',
-            temperature=0.0,
+        # Get Portkey configuration from environment variables
+        self.portkey_api_base = os.getenv("PORTKEY_API_BASE")
+        self.portkey_api_key = os.getenv("PORTKEY_API_KEY")
+        self.portkey_virtual_key_anthropic = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
+        
+        # Set up Portkey headers for Anthropic/Claude
+        portkey_headers = createHeaders(
+            api_key=self.portkey_api_key, 
+            provider="anthropic",
+            virtual_key=self.portkey_virtual_key_anthropic
         )
+        
+        # Initialize the model with Claude instead of GPT-4o
+        self.llm = ChatAnthropic(
+            model="claude-3-7-sonnet-latest",
+            api_key=self.portkey_virtual_key_anthropic,
+            base_url=self.portkey_api_base,
+            default_headers=portkey_headers
+        )
+        
         self.controller = Controller()
         self.browser = None
         self.agent = None
@@ -101,15 +118,9 @@ class BrowserAgent:
 async def main():
     browser_agent = BrowserAgent()
     try:
-        # Define tasks to run sequentially
-        tasks = [
-            'Summarize my last gmail',
-            'Search what you just found from the gmail on the internet. Do not go to gmail, just use your memory.'
-        ]
         
-        # Run each task individually
-        for task in tasks:
-            await browser_agent.run(task)
+        await browser_agent.run("Summarize my last gmail")
+        await browser_agent.run("Search what you just found from the gmail on the internet. Do not go to gmail, just use your memory.")
             
         # Clean up the browser after all tasks are completed
         await browser_agent.cleanup()
