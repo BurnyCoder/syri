@@ -248,13 +248,16 @@ class AIVoiceAgent:
         try:
             # Try different sample rates if needed
             rates_to_try = [sample_rate]
-            
-            # Add standard rates as fallbacks
-            if sample_rate not in [48000, 44100, 22050, 11025, 8000]:
-                rates_to_try.extend([48000, 44100, 22050, 11025, 8000])
+            if sample_rate != 44100:
+                rates_to_try.append(44100)
+            if sample_rate != 16000:
+                rates_to_try.append(16000)
             
             for rate in rates_to_try:
                 try:
+                    print(f"Trying with sample rate: {rate} Hz")
+                    
+                    # Open audio stream in blocking mode
                     stream = self.p.open(
                         format=self.format,
                         channels=self.channels,
@@ -263,8 +266,6 @@ class AIVoiceAgent:
                         input_device_index=input_device_index,
                         frames_per_buffer=self.chunk
                     )
-                    
-                    print(f"Recording with sample rate: {rate} Hz")
                     
                     # Start a non-blocking input thread
                     stop_recording = threading.Event()
@@ -277,29 +278,31 @@ class AIVoiceAgent:
                     input_thread.daemon = True
                     input_thread.start()
                     
-                    # Record audio using blocking mode but ignore overflow errors
+                    # Clear frames array
+                    frames = []
+                    
+                    # Recording loop
                     while not stop_recording.is_set():
                         try:
-                            # Set exception_on_overflow=False to prevent errors
                             data = stream.read(self.chunk, exception_on_overflow=False)
                             frames.append(data)
                         except Exception as e:
-                            if "overflowed" not in str(e).lower():
-                                print(f"Error reading from audio stream: {e}")
-                            continue  # Continue recording despite errors
+                            print(f"Error reading from audio stream: {e}")
+                            break
                     
                     # Stop and close the stream
                     stream.stop_stream()
                     stream.close()
                     
-                    # Create and return temporary audio file
-                    return self._save_audio_to_file(frames, rate)
+                    # If we captured any audio, break out of the rate testing loop
+                    if frames:
+                        return self._save_audio_to_file(frames, rate)
+                        
+                except Exception as e:
+                    print(f"Error with sample rate {rate} Hz: {e}")
                     
-                except Exception as audio_error:
-                    print(f"Failed with rate {rate} Hz: {audio_error}")
-                    continue  # Try next sample rate
-            
-            print("Could not open audio stream with any standard rate.")
+            # If we get here, none of the sample rates worked
+            print("Could not record audio with any sample rate")
             return None
             
         except Exception as e:
@@ -307,35 +310,47 @@ class AIVoiceAgent:
             return None
 
     def _save_audio_to_file(self, frames, sample_rate):
-        """Save recorded audio frames to a WAV file"""
+        """Save recorded audio frames to a temporary WAV file"""
         if not frames:
             print("No audio frames to save")
             return None
             
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+        # Create a temporary file with a proper extension
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
             temp_filename = temp_file.name
         
-        # Save the recorded audio as a WAV file
-        wf = wave.open(temp_filename, 'wb')
-        wf.setnchannels(self.channels)
-        wf.setsampwidth(self.p.get_sample_size(self.format))
-        wf.setframerate(sample_rate)
-        wf.writeframes(b''.join(frames))
-        wf.close()
+        # Write the audio data to the temporary file
+        with wave.open(temp_filename, 'wb') as wf:
+            wf.setnchannels(self.channels)
+            wf.setsampwidth(self.p.get_sample_size(self.format))
+            wf.setframerate(sample_rate)
+            wf.writeframes(b''.join(frames))
         
-        print(f"Recorded {len(frames)} audio chunks")
+        print(f"Audio recorded and saved to temporary file: {temp_filename}")
         return temp_filename
 
     def transcribe_audio(self, audio_file):
-        """Transcribe the recorded audio file"""
+        """
+        Transcribe the recorded audio using AssemblyAI
+        
+        Returns: 
+            str: The transcribed text
+        """
         if not audio_file:
-            print("No audio file to transcribe")
-            return ""
-            
+            return None
+        
         print("Transcribing audio...")
+        
+        # Create a transcriber and set a language model to get formatting
         transcriber = aai.Transcriber()
-        transcript = transcriber.transcribe(audio_file)
+        
+        # Start the transcription
+        try:
+            transcript = transcriber.transcribe(audio_file)
+            print("Audio transcription successful\n")
+        except Exception as e:
+            print(f"Error transcribing audio: {e}")
+            return None
         
         # Delete the temporary file
         try:
@@ -345,53 +360,8 @@ class AIVoiceAgent:
         
         return transcript.text
     
-    def generate_ai_response(self, transcript_text):
-        self.full_transcript.append({"role": "user", "content": transcript_text})
-        print(f"\nUser: {transcript_text}")
-
-        print("\nWeb Agent Response:", flush=True)
-        
-        # Use the web_agent instance with asyncio
-        response_text = asyncio.run(self.web_agent.run(transcript_text))
-        
-        # Stream the entire response at once
-        audio_stream = elevenlabs.generate(
-            text=response_text,
-            model="eleven_turbo_v2",
-            stream=True
-        )
-        print(response_text, flush=True)
-        stream(audio_stream)
-        
-        # # Break the response into sentences for streaming audio - COMMENTED OUT IMPLEMENTATION
-        # sentences = []
-        # temp = ""
-        # for char in response_text:
-        #     temp += char
-        #     if char in ['.', '!', '?'] and len(temp.strip()) > 0:
-        #         sentences.append(temp)
-        #         temp = ""
-        # 
-        # if temp:  # Add any remaining text
-        #     sentences.append(temp)
-        # 
-        # full_text = ""
-        # # Process each sentence
-        # for sentence in sentences:
-        #     audio_stream = elevenlabs.generate(
-        #         text=sentence,
-        #         model="eleven_turbo_v2",
-        #         stream=True
-        #     )
-        #     print(sentence, end="", flush=True)
-        #     stream(audio_stream)
-        #     full_text += sentence
-        
-        print()  # Add a newline after response
-        # Use response_text directly instead of constructed full_text
-        self.full_transcript.append({"role": "assistant", "content": response_text})
-
-    async def generate_ai_response_async(self, transcript_text):
+    async def generate_ai_response(self, transcript_text):
+        """Generate AI response using the web agent"""
         self.full_transcript.append({"role": "user", "content": transcript_text})
         print(f"\nUser: {transcript_text}")
 
@@ -436,41 +406,8 @@ class AIVoiceAgent:
         print("Warning: Chrome browser not found. The web agent requires Chrome to be installed.")
         return False
 
-    def start_session(self):
-        """Start the voice assistant session"""
-        print("Syri Voice Assistant started. Press Enter to speak, then Enter again when done.")
-        
-        # Check if Chrome is installed
-        if not self._check_chrome_installed():
-            print("Chrome is required for the web agent functionality.")
-            print("Please install Chrome and try again.")
-            return
-        
-        try:
-            while True:
-                # Record audio
-                audio_file = self.record_audio()
-                
-                # Transcribe audio
-                transcript_text = self.transcribe_audio(audio_file)
-                
-                if not transcript_text or transcript_text.strip() == "":
-                    print("No speech detected. Please try again.")
-                    continue
-                
-                # Generate AI response
-                self.generate_ai_response(transcript_text)
-                
-        except KeyboardInterrupt:
-            print("\nExiting Syri Voice Assistant...")
-        except Exception as e:
-            print(f"Error: {e}")
-        finally:
-            # Clean up PyAudio
-            self.p.terminate()
-
     async def start_session(self):
-        """Start the voice assistant session"""
+        """Start the voice assistant session asynchronously"""
         print("Syri Voice Assistant started. Press Enter to speak, then Enter again when done.")
         
         # Check if Chrome is installed
@@ -492,7 +429,7 @@ class AIVoiceAgent:
                     continue
                 
                 # Generate AI response asynchronously
-                await self.generate_ai_response_async(transcript_text)
+                await self.generate_ai_response(transcript_text)
                 
         except KeyboardInterrupt:
             print("\nExiting Syri Voice Assistant...")

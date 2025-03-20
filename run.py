@@ -9,7 +9,7 @@ import os
 import time
 import sys
 import asyncio
-from src.syri_agent_simpler_async import AIVoiceAgent
+from src.syri_agent_simpler import AIVoiceAgent
 from src.browser_agent.web_agent import WebAgent
 
 def display_welcome():
