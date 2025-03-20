@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -32,6 +33,13 @@ def start_chrome(start_url="https://google.com"):
     
     # Determine which Chrome binary to use
     chrome_bin = None
+
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        mac_chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if os.path.exists(mac_chrome_path):
+            chrome_bin = mac_chrome_path
+
     for binary in ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]:
         try:
             if subprocess.run(["which", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0:

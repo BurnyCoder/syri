@@ -1,0 +1,5 @@
+## /scripts/ Guidelines
+ - Short, focused scripts
+ - No fluff - no unnecessary comments, no error handling, no docs
+ - Ideally import/reuse code from `src/`, so that scripts also serve as mini integration tests
+ - Accept arguments from the command line

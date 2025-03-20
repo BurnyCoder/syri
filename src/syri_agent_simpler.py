@@ -1,6 +1,7 @@
 import assemblyai as aai
 import elevenlabs
-from elevenlabs import stream, set_api_key
+from elevenlabs import ElevenLabs
+from elevenlabs import stream
 import os
 import sys
 import platform
@@ -36,7 +37,7 @@ class AIVoiceAgent:
             
         aai.settings.api_key = assemblyai_api_key
         # Set ElevenLabs API key
-        set_api_key(elevenlabs_api_key)
+        self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
         
         # Detect operating system
         self.system = platform.system()
@@ -355,10 +356,10 @@ class AIVoiceAgent:
         response_text = run(prompt=transcript_text, cleanup_after=False, skip_chrome_start=True)
         
         # Stream the entire response at once
-        audio_stream = elevenlabs.generate(
+        audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
             text=response_text,
-            model="eleven_turbo_v2",
-            stream=True
+            voice_id="Charlie",
+            model_id="eleven_multilingual_v2"
         )
         print(response_text, flush=True)
         stream(audio_stream)

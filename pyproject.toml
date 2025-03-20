@@ -1,0 +1,17 @@
+[project]
+name = "syri"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "assemblyai>=0.37.0",
+    "browser-use>=0.1.40",
+    "elevenlabs>=1.54.0",
+    "langchain-anthropic>=0.3.3",
+    "langchain-google-genai>=2.1.0",
+    "langchain-openai>=0.3.1",
+    "portkey-ai>=1.11.1",
+    "pyaudio>=0.2.14",
+    "python-dotenv>=1.0.1",
+]
