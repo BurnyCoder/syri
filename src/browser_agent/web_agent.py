@@ -43,25 +43,15 @@ class WebAgent:
         )
         
         # Create LLM with Portkey configuration using Claude
-        llm = ChatAnthropic(
+        self.llm = ChatAnthropic(
             model="claude-3-7-sonnet-latest",
             api_key=self.portkey_virtual_key_anthropic,  # Using the virtual key as the API key
             base_url=self.portkey_api_base,  # Using the custom API base
             default_headers=portkey_headers
         )
         
-        # Initialize the agent once during instantiation with empty task
-        self.agent = Agent(
-            browser=Browser(
-                config=BrowserConfig(
-                    disable_security=True,
-                    cdp_url="http://localhost:9222",
-                ),
-            ),
-            llm=llm,  # Use the Portkey-configured Claude LLM
-            controller=controller
-        )
         self.initialized = False
+        
 
     async def run(self, prompt=None):
         """Run the web agent with the given prompt or current task"""
@@ -72,7 +62,18 @@ class WebAgent:
             
             if not self.initialized:
                 # For the first task, set it directly
-                self.agent.task = full_prompt
+                        # Initialize the agent with a default empty task - this fixes the missing 'task' parameter error
+                self.agent = Agent(
+                    browser=Browser(
+                        config=BrowserConfig(
+                            disable_security=True,
+                            cdp_url="http://localhost:9222",
+                        ),
+                    ),
+                    llm=self.llm,  # Use the Portkey-configured Claude LLM
+                    controller=controller,
+                    task=full_prompt
+                )
                 self.initialized = True
             else:
                 # For subsequent tasks, use add_new_task
