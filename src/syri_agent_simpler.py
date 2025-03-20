@@ -1,6 +1,7 @@
 import assemblyai as aai
 import elevenlabs
-from elevenlabs import stream, set_api_key
+from elevenlabs import ElevenLabs
+from elevenlabs import stream
 import os
 import sys
 import platform
@@ -14,6 +15,12 @@ import asyncio
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Constants for trigger files
+TRIGGER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'triggers')
+START_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'start_listening')
+STOP_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'stop_listening')
+STATE_FILE = os.path.join(TRIGGER_DIR, 'listening_state')
 
 
 class AIVoiceAgent:
@@ -36,11 +43,11 @@ class AIVoiceAgent:
             
         aai.settings.api_key = assemblyai_api_key
         # Set ElevenLabs API key
-        set_api_key(elevenlabs_api_key)
+        self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
         
         # Store web_agent instance
         self.web_agent = web_agent
-        
+
         # Detect operating system
         self.system = platform.system()
         print(f"Detected operating system: {self.system}")
@@ -70,7 +77,25 @@ class AIVoiceAgent:
         self.full_transcript = [
             {"role": "system", "content": "You are a helpful web browsing assistant called Syri. Provide concise, friendly responses based on your web browsing capabilities."},
         ]
-    
+
+        # Ensure trigger directory exists
+        if not os.path.exists(TRIGGER_DIR):
+            os.makedirs(TRIGGER_DIR)
+
+        # Clear any existing trigger files
+        self._clear_trigger_files()
+
+    def _clear_trigger_files(self):
+        """Remove any existing trigger files and initialize state"""
+        if os.path.exists(START_TRIGGER_FILE):
+            os.remove(START_TRIGGER_FILE)
+        if os.path.exists(STOP_TRIGGER_FILE):
+            os.remove(STOP_TRIGGER_FILE)
+
+        # Initialize state to inactive when server starts
+        with open(STATE_FILE, 'w') as f:
+            f.write("inactive")
+
     def _suppress_audio_errors(self):
         """Suppress error messages from audio backends in a platform-appropriate way"""
         if self.system == 'Linux':
@@ -98,11 +123,11 @@ class AIVoiceAgent:
             sys.stderr = self.old_stderr_target
 
     def record_audio(self):
-        """Record audio until the user presses Enter"""
-        print("\nPress Enter to start recording...")
-        input()  # Wait for Enter to start recording
+        """Record audio until a stop trigger file is created"""
+        print("\nWaiting for start trigger...")
+        self._wait_for_start_trigger()
         
-        print("Recording... Press Enter to stop.")
+        print("Recording... Create a stop trigger file to stop.")
         
         # Find the correct input device index and optimal configuration
         # based on detected operating system
@@ -176,6 +201,22 @@ class AIVoiceAgent:
         
         return input_device_index
 
+    def _wait_for_start_trigger(self):
+        """Wait for a start trigger file to be created"""
+        while not os.path.exists(START_TRIGGER_FILE):
+            time.sleep(0.5)
+
+        # Remove the start trigger file once detected
+        os.remove(START_TRIGGER_FILE)
+
+    def _check_stop_trigger(self):
+        """Check if a stop trigger file exists"""
+        if os.path.exists(STOP_TRIGGER_FILE):
+            # Remove the stop trigger file once detected
+            os.remove(STOP_TRIGGER_FILE)
+            return True
+        return False
+
     def _record_with_callback(self, input_device_index, sample_rate):
         """Record audio using callback method (preferred for Mac)"""
         frames = []
@@ -201,16 +242,19 @@ class AIVoiceAgent:
             
             stream.start_stream()
             
-            # Start a non-blocking input thread
+            # Start a thread to check for stop trigger
             stop_recording = threading.Event()
             
-            def wait_for_enter():
-                input()  # Wait for Enter to stop recording
-                stop_recording.set()
+            def check_for_stop():
+                while not stop_recording.is_set():
+                    if self._check_stop_trigger():
+                        stop_recording.set()
+                        break
+                    time.sleep(0.5)
             
-            input_thread = threading.Thread(target=wait_for_enter)
-            input_thread.daemon = True
-            input_thread.start()
+            stop_thread = threading.Thread(target=check_for_stop)
+            stop_thread.daemon = True
+            stop_thread.start()
             
             # Wait for stop signal
             while stream.is_active() and not stop_recording.is_set():
@@ -253,10 +297,11 @@ class AIVoiceAgent:
             if sample_rate != 16000:
                 rates_to_try.append(16000)
             
+            # Try each rate until one works
             for rate in rates_to_try:
                 try:
                     print(f"Trying with sample rate: {rate} Hz")
-                    
+
                     # Open audio stream in blocking mode
                     stream = self.p.open(
                         format=self.format,
@@ -267,20 +312,23 @@ class AIVoiceAgent:
                         frames_per_buffer=self.chunk
                     )
                     
-                    # Start a non-blocking input thread
+                    # Start a thread to check for stop trigger
                     stop_recording = threading.Event()
                     
-                    def wait_for_enter():
-                        input()  # Wait for Enter to stop recording
-                        stop_recording.set()
+                    def check_for_stop():
+                        while not stop_recording.is_set():
+                            if self._check_stop_trigger():
+                                stop_recording.set()
+                                break
+                            time.sleep(0.5)
                     
-                    input_thread = threading.Thread(target=wait_for_enter)
-                    input_thread.daemon = True
-                    input_thread.start()
+                    stop_thread = threading.Thread(target=check_for_stop)
+                    stop_thread.daemon = True
+                    stop_thread.start()
                     
                     # Clear frames array
                     frames = []
-                    
+
                     # Recording loop
                     while not stop_recording.is_set():
                         try:
@@ -297,16 +345,16 @@ class AIVoiceAgent:
                     # If we captured any audio, break out of the rate testing loop
                     if frames:
                         return self._save_audio_to_file(frames, rate)
-                        
+
                 except Exception as e:
                     print(f"Error with sample rate {rate} Hz: {e}")
-                    
+
             # If we get here, none of the sample rates worked
             print("Could not record audio with any sample rate")
             return None
             
         except Exception as e:
-            print(f"Error in blocking recording: {e}")
+            print(f"Error with blocking recording: {e}")
             return None
 
     def _save_audio_to_file(self, frames, sample_rate):
@@ -332,18 +380,18 @@ class AIVoiceAgent:
     def transcribe_audio(self, audio_file):
         """
         Transcribe the recorded audio using AssemblyAI
-        
-        Returns: 
+
+        Returns:
             str: The transcribed text
         """
         if not audio_file:
             return None
-        
+
         print("Transcribing audio...")
-        
+
         # Create a transcriber and set a language model to get formatting
         transcriber = aai.Transcriber()
-        
+
         # Start the transcription
         try:
             transcript = transcriber.transcribe(audio_file)
@@ -371,14 +419,14 @@ class AIVoiceAgent:
         response_text = await self.web_agent.run(transcript_text)
         
         # Stream the entire response at once
-        audio_stream = elevenlabs.generate(
+        audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
             text=response_text,
-            model="eleven_turbo_v2",
-            stream=True
+            voice_id="IKne3meq5aSn9XLyUdCD", # charlie
+            model_id="eleven_multilingual_v2"
         )
         print(response_text, flush=True)
         stream(audio_stream)
-        
+
         print()  # Add a newline after response
         self.full_transcript.append({"role": "assistant", "content": response_text})
 
@@ -408,7 +456,11 @@ class AIVoiceAgent:
 
     async def start_session(self):
         """Start the voice assistant session asynchronously"""
-        print("Syri Voice Assistant started. Press Enter to speak, then Enter again when done.")
+        print("Syri Voice Assistant started. Use Enter key or scripts to control:")
+        print("  • Press Enter to toggle between start/stop recording")
+        print("  • ./scripts/start_listening.sh - Start recording")
+        print("  • ./scripts/stop_listening.sh - Stop recording and process request")
+        print("  • ./scripts/toggle_listening.sh - Toggle between start/stop")
         
         # Check if Chrome is installed
         if not self._check_chrome_installed():
@@ -417,6 +469,40 @@ class AIVoiceAgent:
             return
         
         try:
+            # Create an event for keyboard input
+            keyboard_event = threading.Event()
+            stop_session = threading.Event()
+            
+            def handle_keyboard_input():
+                while not stop_session.is_set():
+                    try:
+                        input()  # Wait for Enter key
+                        if os.path.exists(STATE_FILE):
+                            with open(STATE_FILE, 'r') as f:
+                                current_state = f.read().strip()
+                            
+                            if current_state == "inactive":
+                                # Start listening
+                                with open(STATE_FILE, 'w') as f:
+                                    f.write("active")
+                                touch_file = os.path.join(TRIGGER_DIR, "start_listening")
+                            else:
+                                # Stop listening
+                                with open(STATE_FILE, 'w') as f:
+                                    f.write("inactive")
+                                touch_file = os.path.join(TRIGGER_DIR, "stop_listening")
+                                
+                            # Create the appropriate trigger file
+                            with open(touch_file, 'w') as f:
+                                pass
+                    except EOFError:
+                        break
+            
+            # Start keyboard input thread
+            keyboard_thread = threading.Thread(target=handle_keyboard_input)
+            keyboard_thread.daemon = True
+            keyboard_thread.start()
+            
             while True:
                 # Record audio
                 audio_file = self.record_audio()
@@ -433,8 +519,10 @@ class AIVoiceAgent:
                 
         except KeyboardInterrupt:
             print("\nExiting Syri Voice Assistant...")
+            stop_session.set()  # Signal the keyboard thread to stop
         except Exception as e:
             print(f"Error: {e}")
+            stop_session.set()  # Signal the keyboard thread to stop
         finally:
             # Clean up PyAudio
             self.p.terminate()

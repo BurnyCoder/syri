@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -32,6 +33,13 @@ def start_chrome(start_url="https://google.com"):
     
     # Determine which Chrome binary to use
     chrome_bin = None
+
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        mac_chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if os.path.exists(mac_chrome_path):
+            chrome_bin = mac_chrome_path
+
     for binary in ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]:
         try:
             if subprocess.run(["which", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0:
@@ -62,11 +70,13 @@ def start_chrome(start_url="https://google.com"):
     print(f"Waiting for Chrome to start and load {start_url}...")
     time.sleep(5)
 
-def cleanup(exit_process=True):
+def cleanup(signum=None, frame=None, exit_process=True):
     """
-    Cleanup function to kill Chrome process
+    Cleanup function to kill Chrome process. Also serves as a signal handler.
     
     Args:
+        signum: Signal number (when used as signal handler)
+        frame: Current stack frame (when used as signal handler)
         exit_process (bool): Whether to exit the Python process after cleanup.
                             Set to False when called programmatically.
     """

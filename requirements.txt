@@ -1,9 +1,0 @@
-assemblyai[extras]>=0.21.0
-portkey-ai>=1.0.0
-elevenlabs>=0.2.24
-python-dotenv>=1.0.0
-pyaudio>=0.2.13 
-langchain-openai>=0.0.5
-langchain-anthropic>=0.1.1
-langchain-google-genai>=0.0.6
-browser-use>=0.4.0 

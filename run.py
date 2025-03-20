@@ -9,7 +9,7 @@ import os
 import time
 import sys
 import asyncio
-from src.syri_agent_simpler import AIVoiceAgent
+from src.syri_agent_simpler import AIVoiceAgent, TRIGGER_DIR, STATE_FILE
 from src.browser_agent.web_agent import WebAgent
 
 def display_welcome():
@@ -29,19 +29,18 @@ async def main():
     """Main entry point for the voice assistant."""
     display_welcome()
 
+    # Ensure trigger directory exists
+    if not os.path.exists(TRIGGER_DIR):
+        os.makedirs(TRIGGER_DIR)
+
     try:
         # Initialize web agent just once
         print("Initializing web and voice agent...")
         web_agent = WebAgent()
         print("Web agent initialized and ready.\n")
-        
+
         # Create the voice agent, passing the web_agent instance
         agent = AIVoiceAgent(web_agent=web_agent)
-        print("Voice agent initialized and ready.\n")
-        
-        print("\nStarting voice assistant...\n")
-        print("Press Enter to start recording, speak, then press Enter again when done.")
-        print("Press Ctrl+C to exit.")
         
         # Start the voice agent session
         await agent.start_session()
@@ -61,4 +60,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main())) 
+    sys.exit(asyncio.run(main()))

@@ -1,0 +1,26 @@
+## Tech Stack
+Python 3.12
+Asyncio
+
+### Dependencies
+- assemblyai - Speech-to-text transcription
+- browser-use - Browser automation and control
+- elevenlabs - Text-to-speech synthesis
+- langchain-anthropic - Claude LLM integration
+- langchain-google-genai - Google AI models integration
+- langchain-openai - OpenAI models integration
+- portkey-ai - LLM API management and routing
+- pyaudio - Audio recording and playback
+
+### Spec
+
+- External control of listening functionality:
+  - Start/stop listening must be triggerable from outside the Python process (e.g., via shell scripts)
+  - Support for remote device control through Karabiner/BetterTouchTool by executing shell/AppleScript commands
+
+
+### /scripts/ Guidelines
+ - Short, focused scripts
+ - No fluff - no unnecessary comments, no error handling, no docs
+ - Ideally import/reuse code from `src/`, so that scripts also serve as mini integration tests
+ - Accept arguments from the command line
