@@ -66,8 +66,10 @@ class WebAgent:
         self.browser = None
         self.agent = None
         self.browser_context = None
+        
+        self.setup_browser()
     
-    async def setup_browser(self, start_url="https://google.com"):
+    def setup_browser(self, start_url="https://google.com"):
         """Set up a browser instance with remote debugging."""
         start_chrome(start_url)
         
@@ -101,10 +103,6 @@ class WebAgent:
             # If user provided additional prompt instructions, add them
             if self.additional_prompt:
                 task = f"{task} {self.additional_prompt}"
-                
-            # Set up the browser first if not already done
-            if not self.browser:
-                await self.setup_browser()
                 
             if self.agent is None:
                 # Create the agent with injected browser and browser context to prevent auto-closing
