@@ -120,6 +120,10 @@ class WebAgent:
             
             # Run the agent
             result = await self.agent.run()
+            # Handle case where agent.run() returns None (after consecutive failures)
+            if result is None:
+                logger.warning("There was an error with the agent. Please try again.")
+                return "There was an error with the agent. Please try again?"
             final_answer = result.final_result()
             return final_answer
                 
