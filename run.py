@@ -9,7 +9,7 @@ import os
 import time
 import sys
 import asyncio
-from src.syri_agent_simpler import AIVoiceAgent, TRIGGER_DIR, STATE_FILE
+from src.syri_agent_simpler import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
 from src.browser_agent.web_agent import WebAgent
 
 def display_welcome():
@@ -32,6 +32,10 @@ async def main():
     # Ensure trigger directory exists
     if not os.path.exists(TRIGGER_DIR):
         os.makedirs(TRIGGER_DIR)
+
+    # Remove any existing abort trigger file from previous runs
+    if os.path.exists(ABORT_TRIGGER_FILE):
+        os.remove(ABORT_TRIGGER_FILE)
 
     try:
         # Initialize web agent just once

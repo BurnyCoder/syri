@@ -14,6 +14,7 @@ uv for dependency management, use `uv sync`, `uv add <package>`, `uv remove <pac
 - pyaudio - Audio recording and playback
 
 ### Spec
+- It should be possible to abort the execution/progress of the running task or TTS
 - Reuses existing Chrome instance if already listening on port 9222, otherwise launches new instance
 - External control of listening functionality:
   - Start/stop listening must be triggerable from outside the Python process (e.g., via shell scripts)

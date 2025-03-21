@@ -20,6 +20,7 @@ load_dotenv()
 TRIGGER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'triggers')
 START_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'start_listening')
 STOP_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'stop_listening')
+ABORT_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'abort_execution')
 STATE_FILE = os.path.join(TRIGGER_DIR, 'listening_state')
 
 
@@ -47,6 +48,9 @@ class AIVoiceAgent:
         
         # Store web_agent instance
         self.web_agent = web_agent
+
+        # Create abort event flag
+        self.abort_event = threading.Event()
 
         # Detect operating system
         self.system = platform.system()
@@ -91,6 +95,8 @@ class AIVoiceAgent:
             os.remove(START_TRIGGER_FILE)
         if os.path.exists(STOP_TRIGGER_FILE):
             os.remove(STOP_TRIGGER_FILE)
+        if os.path.exists(ABORT_TRIGGER_FILE):
+            os.remove(ABORT_TRIGGER_FILE)
 
         # Initialize state to inactive when server starts
         with open(STATE_FILE, 'w') as f:
@@ -407,41 +413,106 @@ class AIVoiceAgent:
         
         return transcript.text
     
+    def check_abort_trigger(self):
+        """Check if abort trigger file exists"""
+        if os.path.exists(ABORT_TRIGGER_FILE):
+            # Remove the trigger file
+            try:
+                os.remove(ABORT_TRIGGER_FILE)
+            except Exception:
+                pass
+            return True
+        return False
+
+    def abort_current_execution(self):
+        """Abort current execution by setting the abort event"""
+        print("\nAborting current execution...", flush=True)
+        self.abort_event.set()
+        # Reset the abort event after a short delay to allow tasks to be aborted
+        threading.Timer(1.0, self.abort_event.clear).start()
+        self.web_agent.agent.stop()
+
     async def generate_ai_response(self, transcript_text):
         """Generate AI response using the web agent"""
         self.full_transcript.append({"role": "user", "content": transcript_text})
         print(f"\nUser: {transcript_text}")
 
+        # Reset abort event before starting
+        self.abort_event.clear()
+
         print("\nWeb Agent Response:", flush=True)
         
-        # Use the web_agent instance with await
-        response_text = await self.web_agent.run(transcript_text)
+        # Start a thread to monitor for abort signal during web agent processing
+        abort_monitor = threading.Thread(target=self._monitor_abort_during_task)
+        abort_monitor.daemon = True
+        abort_monitor.start()
         
-        # Get speech speed from environment variable (default to 1.2 if not set)
-        speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
-        print(f"Using speech speed: {speech_speed}x", flush=True)
-        
-        # Create voice settings with the specified speed using VoiceSettings class
-        voice_settings = VoiceSettings(
-            stability=0.5,
-            similarity_boost=0.75,
-            style=0.0,
-            use_speaker_boost=True,
-            speed=speech_speed  # Apply the speech speed here
-        )
-        
-        # Stream the entire response at once with the specified speed
-        audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
-            text=response_text,
-            voice_id="IKne3meq5aSn9XLyUdCD", # charlie
-            model_id="eleven_multilingual_v2",
-            voice_settings=voice_settings  # Pass VoiceSettings object directly
-        )
-        print(response_text, flush=True)
-        stream(audio_stream)
+        try:
+            # Use the web_agent instance with await
+            response_text = await self.web_agent.run(transcript_text)
+            
+            # If task was aborted, return early
+            if self.abort_event.is_set():
+                print("\nTask aborted before TTS generation", flush=True)
+                return
+                
+            # Get speech speed from environment variable (default to 1.2 if not set)
+            speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
+            print(f"Using speech speed: {speech_speed}x", flush=True)
+            
+            # Create voice settings with the specified speed using VoiceSettings class
+            voice_settings = VoiceSettings(
+                stability=0.5,
+                similarity_boost=0.75,
+                style=0.0,
+                use_speaker_boost=True,
+                speed=speech_speed  # Apply the speech speed here
+            )
+            
+            # Generate the TTS stream
+            audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
+                text=response_text,
+                voice_id="IKne3meq5aSn9XLyUdCD", # charlie
+                model_id="eleven_multilingual_v2",
+                voice_settings=voice_settings  # Pass VoiceSettings object directly
+            )
+            
+            print(response_text, flush=True)
+            
+            # Custom streaming with abort checking
+            self._stream_with_abort_check(audio_stream)
+            
+            print()  # Add a newline after response
+            self.full_transcript.append({"role": "assistant", "content": response_text})
+        except Exception as e:
+            print(f"\nError during AI response generation: {e}", flush=True)
 
-        print()  # Add a newline after response
-        self.full_transcript.append({"role": "assistant", "content": response_text})
+    def _monitor_abort_during_task(self):
+        """Monitor for abort signal during task execution"""
+        while not self.abort_event.is_set():
+            if self.check_abort_trigger():
+                self.abort_current_execution()
+                break
+            time.sleep(0.2)  # Check every 200ms
+
+    def _stream_with_abort_check(self, audio_stream):
+        """Stream audio with periodic checks for abort signal"""
+        try:
+            # Use a generator to wrap the stream and check for aborts
+            def stream_with_checks():
+                for chunk in audio_stream:
+                    if self.abort_event.is_set() or self.check_abort_trigger():
+                        # If abort signal detected, stop streaming
+                        if not self.abort_event.is_set():
+                            self.abort_current_execution()
+                        print("\nTTS playback aborted", flush=True)
+                        break
+                    yield chunk
+            
+            # Pass the wrapped generator to the stream function
+            stream(stream_with_checks())
+        except Exception as e:
+            print(f"\nError during audio streaming: {e}", flush=True)
 
     def _check_chrome_installed(self):
         """Check if Chrome is installed and available"""
@@ -474,6 +545,7 @@ class AIVoiceAgent:
         print("  • ./scripts/start_listening.sh - Start recording")
         print("  • ./scripts/stop_listening.sh - Stop recording and process request")
         print("  • ./scripts/toggle_listening.sh - Toggle between start/stop")
+        print("  • ./scripts/abort_execution.sh - Abort current task or TTS")
         
         # Check if Chrome is installed
         if not self._check_chrome_installed():
@@ -492,6 +564,16 @@ class AIVoiceAgent:
                         if os.path.exists(STATE_FILE):
                             with open(STATE_FILE, 'r') as f:
                                 current_state = f.read().strip()
+                            
+                            # If already running a task, abort it
+                            if self.abort_event.is_set():
+                                print("Already aborting a task. Please wait...")
+                                continue
+                            
+                            # If we're currently processing (not recording), abort the task
+                            if current_state == "processing":
+                                self.abort_current_execution()
+                                continue
                             
                             if current_state == "inactive":
                                 # Start listening
@@ -519,15 +601,37 @@ class AIVoiceAgent:
                 # Record audio
                 audio_file = self.record_audio()
                 
+                # Set state to processing (to allow abort during processing)
+                with open(STATE_FILE, 'w') as f:
+                    f.write("processing")
+                    
+                # Monitor for abort during transcription and processing
+                abort_monitor = threading.Thread(target=self._monitor_abort_during_task)
+                abort_monitor.daemon = True
+                abort_monitor.start()
+                
                 # Transcribe audio
                 transcript_text = self.transcribe_audio(audio_file)
                 
+                # Check if aborted during transcription
+                if self.abort_event.is_set():
+                    print("\nAborted during transcription", flush=True)
+                    self.abort_event.clear()
+                    continue
+                
                 if not transcript_text or transcript_text.strip() == "":
                     print("No speech detected. Please try again.")
+                    # Reset state to inactive
+                    with open(STATE_FILE, 'w') as f:
+                        f.write("inactive")
                     continue
                 
                 # Generate AI response asynchronously
                 await self.generate_ai_response(transcript_text)
+                
+                # Reset state to inactive
+                with open(STATE_FILE, 'w') as f:
+                    f.write("inactive")
                 
         except KeyboardInterrupt:
             print("\nExiting Syri Voice Assistant...")
