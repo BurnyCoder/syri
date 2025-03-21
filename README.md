@@ -18,7 +18,7 @@ This project enables a fully conversational AI experience similar to Siri, but u
 
 2. **Install PortAudio** (required for audio recording):
    - Debian/Ubuntu: `apt install portaudio19-dev`
-   - MacOS: `brew install portaudio`
+   - MacOS: `brew install portaudio sox`
 
 3. **For MacOS users only:** Install MPV for audio streaming
    - `brew install mpv`
@@ -29,7 +29,7 @@ This project enables a fully conversational AI experience similar to Siri, but u
 ### Step 2: Install Python Dependencies
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### Step 3: Configure Environment Variables
@@ -54,14 +54,14 @@ You can run the assistant using either of these methods:
 ### Method 1: Using the runner script (recommended)
 
 ```bash
-python run.py
+uv run run.py
 ```
 
-This script performs pre-checks to ensure all requirements are met and provides a better user experience.
+This script performs pre-checks and starts the assistant in an inactive listening state.
 
-1. Press Enter to start recording
-2. Speak into your microphone
-3. Press Enter again when you've finished speaking
+1. To start listening, press Enter or run `./scripts/start_listening.sh` (useful for automation)
+2. Describe your request
+3. Press Enter again or run `./scripts/stop_listening.sh` when done
 4. The AI will transcribe your speech, process it through the web agent, and respond both in text (console) and through speech
 
 ## How It Works
