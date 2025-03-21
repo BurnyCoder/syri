@@ -45,7 +45,6 @@ uv sync
    ELEVENLABS_API_KEY=your_actual_elevenlabs_key_here
    PORTKEY_API_KEY=your_actual_portkey_key_here
    PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_actual_portkey_virtual_key_here
-   ```
 
 ## Usage
 

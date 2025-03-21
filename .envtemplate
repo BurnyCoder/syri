@@ -18,3 +18,7 @@ PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_portkey_virtual_key_for_anthropic_here
 # -----------------------------------------
 # Custom addition to system prompt for the Web agent
 # WEB_AGENT_PROMPT="Return final messgae in json format"
+
+# Text-to-Speech Configuration (Optional)
+# -----------------------------------------
+# SYRI_TTS_SPEED=1.2

@@ -1,7 +1,7 @@
 import assemblyai as aai
-import elevenlabs
 from elevenlabs import ElevenLabs
 from elevenlabs import stream
+from elevenlabs.types import VoiceSettings
 import os
 import sys
 import platform
@@ -417,11 +417,25 @@ class AIVoiceAgent:
         # Use the web_agent instance with await
         response_text = await self.web_agent.run(transcript_text)
         
-        # Stream the entire response at once
+        # Get speech speed from environment variable (default to 1.2 if not set)
+        speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
+        print(f"Using speech speed: {speech_speed}x", flush=True)
+        
+        # Create voice settings with the specified speed using VoiceSettings class
+        voice_settings = VoiceSettings(
+            stability=0.5,
+            similarity_boost=0.75,
+            style=0.0,
+            use_speaker_boost=True,
+            speed=speech_speed  # Apply the speech speed here
+        )
+        
+        # Stream the entire response at once with the specified speed
         audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
             text=response_text,
             voice_id="IKne3meq5aSn9XLyUdCD", # charlie
-            model_id="eleven_multilingual_v2"
+            model_id="eleven_multilingual_v2",
+            voice_settings=voice_settings  # Pass VoiceSettings object directly
         )
         print(response_text, flush=True)
         stream(audio_stream)
@@ -468,8 +482,7 @@ class AIVoiceAgent:
             return
         
         try:
-            # Create an event for keyboard input
-            keyboard_event = threading.Event()
+            # Create an event to signal stopping the session
             stop_session = threading.Event()
             
             def handle_keyboard_input():
