@@ -124,7 +124,6 @@ class AIVoiceAgent:
 
     def record_audio(self):
         """Record audio until a stop trigger file is created"""
-        print("\nWaiting for start trigger...")
         self._wait_for_start_trigger()
         
         print("Recording... Create a stop trigger file to stop.")
@@ -456,7 +455,7 @@ class AIVoiceAgent:
 
     async def start_session(self):
         """Start the voice assistant session asynchronously"""
-        print("Syri Voice Assistant started. Use Enter key or scripts to control:")
+        print("Syri Voice Assistant started and ready to listen 🟢")
         print("  • Press Enter to toggle between start/stop recording")
         print("  • ./scripts/start_listening.sh - Start recording")
         print("  • ./scripts/stop_listening.sh - Stop recording and process request")

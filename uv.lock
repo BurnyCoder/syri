@@ -1048,6 +1048,7 @@ dependencies = [
     { name = "portkey-ai" },
     { name = "pyaudio" },
     { name = "python-dotenv" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -1061,6 +1062,7 @@ requires-dist = [
     { name = "portkey-ai", specifier = ">=1.11.1" },
     { name = "pyaudio", specifier = ">=0.2.14" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 
 [[package]]

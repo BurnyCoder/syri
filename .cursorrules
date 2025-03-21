@@ -1,6 +1,7 @@
 ## Tech Stack
 Python 3.12
 Asyncio
+uv for dependency management, use `uv sync`, `uv add <package>`, `uv remove <package>` and `uv run <script>`
 
 ### Dependencies
 - assemblyai - Speech-to-text transcription
@@ -24,3 +25,4 @@ Asyncio
  - No fluff - no unnecessary comments, no error handling, no docs
  - Ideally import/reuse code from `src/`, so that scripts also serve as mini integration tests
  - Accept arguments from the command line
+  

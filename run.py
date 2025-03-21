@@ -21,7 +21,7 @@ def display_welcome():
     print("  • AssemblyAI for speech-to-text")
     print("  • Web browser agent (with Claude 3.7 Sonnet) for AI processing")
     print("  • ElevenLabs for text-to-speech")
-    print("\nStarting up...\n")
+    print("\nStarting up...")
     time.sleep(1)
 
 
@@ -37,7 +37,7 @@ async def main():
         # Initialize web agent just once
         print("Initializing web and voice agent...")
         web_agent = WebAgent()
-        print("Web agent initialized and ready.\n")
+        print("Web agent initialized and ready 🟢")
 
         # Create the voice agent, passing the web_agent instance
         agent = AIVoiceAgent(web_agent=web_agent)

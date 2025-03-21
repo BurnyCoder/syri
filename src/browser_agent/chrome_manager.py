@@ -5,8 +5,19 @@ import subprocess
 import sys
 import time
 import signal
+import requests
+from typing import Optional
+
 # Global variable to track the Chrome process
 chrome_process = None
+
+def is_chrome_debugging_available(port: int = 9222) -> bool:
+    """Check if Chrome is already running with remote debugging on specified port"""
+    try:
+        response = requests.get(f"http://localhost:{port}/json/version")
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
 
 def start_chrome(start_url="https://google.com"):
     """
@@ -21,6 +32,11 @@ def start_chrome(start_url="https://google.com"):
     
     global chrome_process
     
+    # Check if Chrome is already running with remote debugging
+    if is_chrome_debugging_available():
+        print("Chrome already running with remote debugging on port 9222, using that instead of starting a new instance")
+        return
+
     # Close any existing Chrome instances with the debug profile
     try:
         subprocess.run(
