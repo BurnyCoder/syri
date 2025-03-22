@@ -1,5 +1,5 @@
 import assemblyai as aai
-from elevenlabs import ElevenLabs
+from elevenlabs.client import ElevenLabs
 from elevenlabs import stream
 from elevenlabs.types import VoiceSettings
 import os
@@ -626,6 +626,13 @@ class AIVoiceAgent:
                         f.write("inactive")
                     continue
                 
+                # Speak confirmation message with transcript in a separate thread
+                threading.Thread(
+                    target=self._speak_confirmation_message,
+                    args=(transcript_text,),
+                    daemon=True
+                ).start()
+                
                 # Generate AI response asynchronously
                 await self.generate_ai_response(transcript_text)
                 
@@ -642,6 +649,38 @@ class AIVoiceAgent:
         finally:
             # Clean up PyAudio
             self.p.terminate()
+
+    def _speak_confirmation_message(self, transcript_text):
+        """Speak a confirmation message with the transcript in a separate thread"""
+        print("Speaking confirmation message...", flush=True)
+        confirmation_text = f"Message received: {transcript_text}"
+        
+        try:
+            # Get speech speed from environment variable (default to 1.2 if not set)
+            speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
+            
+            # Create voice settings with the specified speed
+            voice_settings = VoiceSettings(
+                stability=0.5,
+                similarity_boost=0.75,
+                style=0.0,
+                use_speaker_boost=True,
+                speed=speech_speed
+            )
+            
+            # Generate the TTS stream for confirmation
+            confirmation_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
+                text=confirmation_text,
+                voice_id="IKne3meq5aSn9XLyUdCD",  # charlie
+                model_id="eleven_multilingual_v2",
+                voice_settings=voice_settings
+            )
+            
+            # Stream the confirmation audio
+            self._stream_with_abort_check(confirmation_stream)
+            
+        except Exception as e:
+            print(f"Error speaking confirmation: {e}", flush=True)
 
 
 # Direct execution of the script
