@@ -1,6 +1,7 @@
 import assemblyai as aai
-from elevenlabs import generate, stream, set_api_key
-from elevenlabs import VoiceSettings
+from elevenlabs import ElevenLabs
+from elevenlabs import stream
+from elevenlabs.types import VoiceSettings
 import os
 import sys
 import platform
@@ -43,7 +44,7 @@ class AIVoiceAgent:
             raise ValueError("Portkey Virtual Key not found. Please set PORTKEY_VIRTUAL_KEY_ANTHROPIC in your .env file")
 
         aai.settings.api_key = assemblyai_api_key
-        set_api_key(elevenlabs_api_key)
+        self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
         
         self.web_agent = web_agent
         self.task_service = task_service
@@ -468,15 +469,11 @@ class AIVoiceAgent:
             )
             
             # Generate the TTS stream
-            audio_stream = generate(
+            audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
                 text=response_text,
-                voice="Rachel",
-                model="eleven_monolingual_v1",
-                voice_settings=VoiceSettings(
-                    stability=0.5,
-                    similarity_boost=0.75
-                ),
-                stream=True
+                voice_id="IKne3meq5aSn9XLyUdCD", # charlie
+                model_id="eleven_multilingual_v2",
+                voice_settings=voice_settings  # Pass VoiceSettings object directly
             )
             
             print(response_text, flush=True)
