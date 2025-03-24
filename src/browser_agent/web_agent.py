@@ -2,6 +2,7 @@ import os
 import logging
 import time
 import asyncio
+import uuid
 
 from langchain_anthropic import ChatAnthropic
 from portkey_ai import createHeaders
@@ -35,9 +36,11 @@ def log_progress(message: str) -> str:
 class WebAgent:
     """Class to manage browser-based agent interactions."""
     
-    def __init__(self, initial_task="Summarize my last gmail"):
+    def __init__(self, initial_task="Summarize my last gmail", port: int = 9222):
         """Initialize the WebAgent with configuration."""
         self.task = initial_task
+        self.port = port
+        self.conversation_id = str(uuid.uuid4())
         
         # Get Portkey configuration from environment variables
         self.portkey_api_base = os.getenv("PORTKEY_API_BASE")
@@ -71,12 +74,12 @@ class WebAgent:
     
     def setup_browser(self, start_url="https://google.com"):
         """Set up a browser instance with remote debugging."""
-        start_chrome(start_url)
+        start_chrome(start_url, port=self.port)
         
         self.browser = Browser(
             config=BrowserConfig(
                 disable_security=True,
-                cdp_url="http://localhost:9222",
+                cdp_url=f"http://localhost:{self.port}",
             ),
         )
         
@@ -87,13 +90,13 @@ class WebAgent:
     async def cleanup(self):
         """Clean up browser resources."""
         if self.browser:
-            logger.info("Cleaning up browser instance...")
+            logger.info(f"Cleaning up browser instance on port {self.port}...")
             if self.browser_context:
                 await self.browser_context.close()
                 self.browser_context = None
             await self.browser.close()
             self.browser = None
-            cleanup(exit_process=False)
+            cleanup(port=self.port, exit_process=False)
             # Wait to ensure browser is fully closed
             await asyncio.sleep(3)
     
@@ -165,21 +168,66 @@ class WebAgent:
             if cleanup_after:
                 await self.cleanup()
 
-async def main():
-    browser_agent = WebAgent()
-    try:
+
+class ConversationManager:
+    """Manages multiple concurrent web agent conversations."""
+    
+    def __init__(self):
+        self.conversations = {}
+        self.next_port = 9222  # Starting port number
+    
+    def create_conversation(self, initial_task: str = "Summarize my last gmail") -> str:
+        """Create a new conversation with a unique port."""
+        port = self.next_port
+        self.next_port += 1
         
-        await browser_agent.run("Summarize my last gmail")
-        await browser_agent.run("Search what you just found from the gmail on the internet. Do not go to gmail, just use your memory.")
-            
-        # Clean up the browser after all tasks are completed
-        await browser_agent.cleanup()
-        logger.info("Cleanup complete")
-            
-    except Exception as e:
-        logger.error(f"Error in main: {e}")
-        # Cleanup if exception occurs
-        await browser_agent.cleanup()
+        conversation_id = str(uuid.uuid4())
+        web_agent = WebAgent(initial_task=initial_task, port=port)
+        self.conversations[conversation_id] = web_agent
+        
+        return conversation_id
+    
+    async def run_task(self, conversation_id: str, task: str) -> str:
+        """Run a task in a specific conversation."""
+        if conversation_id not in self.conversations:
+            raise ValueError(f"Conversation {conversation_id} not found")
+        
+        web_agent = self.conversations[conversation_id]
+        return await web_agent.run(task)
+    
+    async def cleanup_conversation(self, conversation_id: str):
+        """Clean up a specific conversation."""
+        if conversation_id in self.conversations:
+            web_agent = self.conversations[conversation_id]
+            await web_agent.cleanup()
+            del self.conversations[conversation_id]
+    
+    async def cleanup_all(self):
+        """Clean up all conversations."""
+        for conversation_id in list(self.conversations.keys()):
+            await self.cleanup_conversation(conversation_id)
+
+
+async def main():
+    # Example usage of multiple conversations
+    manager = ConversationManager()
+    
+    try:
+        # Create two conversations
+        conv1_id = manager.create_conversation("Summarize my last gmail")
+        conv2_id = manager.create_conversation("Search for recent AI news")
+        
+        # Run tasks in parallel
+        results = await asyncio.gather(
+            manager.run_task(conv1_id, "Summarize my last gmail"),
+            manager.run_task(conv2_id, "Search for recent AI news")
+        )
+        
+        print("Results:", results)
+        
+    finally:
+        # Clean up all conversations
+        await manager.cleanup_all()
 
 
 if __name__ == '__main__':

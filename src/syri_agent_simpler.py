@@ -33,7 +33,7 @@ class Task:
     is_processing: bool = False
 
 class AIVoiceAgent:
-    def __init__(self, web_agent=None):
+    def __init__(self, conversation_manager=None):
         # Get API keys from environment variables
         assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
         elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
@@ -54,12 +54,10 @@ class AIVoiceAgent:
         # Set ElevenLabs API key
         self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
         
-        # Store web_agent instance
-        self.web_agent = web_agent
-
-        # Create abort event flag
-        self.abort_event = threading.Event()
-
+        # Store conversation manager
+        self.conversation_manager = conversation_manager
+        self.current_conversation_id = None
+        
         # Detect operating system
         self.system = platform.system()
         print(f"Detected operating system: {self.system}")
@@ -717,6 +715,45 @@ class AIVoiceAgent:
         
         # Run TTS in a separate thread
         self._generate_and_play_tts(confirmation_text)
+
+    async def process_voice_input(self):
+        """Process voice input and generate response."""
+        try:
+            # Start a new conversation if none exists
+            if self.current_conversation_id is None and self.conversation_manager:
+                self.current_conversation_id = self.conversation_manager.create_conversation()
+            
+            # Process the audio input
+            audio_data = self._record_audio()
+            if audio_data is None:
+                return
+            
+            # Transcribe audio to text
+            text = await self._transcribe_audio(audio_data)
+            if not text:
+                return
+            
+            # Add to transcript
+            self.full_transcript.append({"role": "user", "content": text})
+            
+            # Process the text with the web agent
+            if self.conversation_manager and self.current_conversation_id:
+                response = await self.conversation_manager.run_task(
+                    self.current_conversation_id,
+                    text
+                )
+            else:
+                response = "Error: No active conversation"
+            
+            # Add response to transcript
+            self.full_transcript.append({"role": "assistant", "content": response})
+            
+            # Convert response to speech
+            await self._text_to_speech(response)
+            
+        except Exception as e:
+            logger.error(f"Error processing voice input: {e}")
+            await self._text_to_speech("I encountered an error. Please try again.")
 
 
 # Direct execution of the script

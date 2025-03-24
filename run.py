@@ -10,7 +10,7 @@ import time
 import sys
 import asyncio
 from src.syri_agent_simpler import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
-from src.browser_agent.web_agent import WebAgent
+from src.browser_agent.web_agent import ConversationManager
 
 def display_welcome():
     """Display welcome message and instructions."""
@@ -38,13 +38,13 @@ async def main():
         os.remove(ABORT_TRIGGER_FILE)
 
     try:
-        # Initialize web agent just once
-        print("Initializing web and voice agent...")
-        web_agent = WebAgent()
-        print("Web agent initialized and ready 🟢")
+        # Initialize conversation manager
+        print("Initializing conversation manager...")
+        conversation_manager = ConversationManager()
+        print("Conversation manager initialized and ready 🟢")
 
-        # Create the voice agent, passing the web_agent instance
-        agent = AIVoiceAgent(web_agent=web_agent)
+        # Create the voice agent, passing the conversation manager
+        agent = AIVoiceAgent(conversation_manager=conversation_manager)
         
         # Start the voice agent session
         await agent.start_session()
@@ -56,9 +56,9 @@ async def main():
         print("The assistant has encountered an error and needs to exit.")
         return 1
     finally:
-        # Ensure browser is properly cleaned up when the script exits
-        if 'web_agent' in locals():
-            await web_agent.cleanup()
+        # Ensure all conversations are properly cleaned up when the script exits
+        if 'conversation_manager' in locals():
+            await conversation_manager.cleanup_all()
     
     return 0
 

@@ -6,10 +6,10 @@ import sys
 import time
 import signal
 import requests
-from typing import Optional
+from typing import Optional, Dict
 
-# Global variable to track the Chrome process
-chrome_process = None
+# Global variable to track Chrome processes
+chrome_processes: Dict[int, subprocess.Popen] = {}
 
 def is_chrome_debugging_available(port: int = 9222) -> bool:
     """Check if Chrome is already running with remote debugging on specified port"""
@@ -19,28 +19,27 @@ def is_chrome_debugging_available(port: int = 9222) -> bool:
     except requests.RequestException:
         return False
 
-def start_chrome(start_url="https://google.com"):
+def start_chrome(start_url="https://google.com", port: int = 9222):
     """
     Start Chrome with remote debugging enabled
     
     Args:
         start_url (str): The URL to open when Chrome starts. Defaults to Google.
+        port (int): The port to use for remote debugging. Defaults to 9222.
     """
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
     
-    global chrome_process
-    
-    # Check if Chrome is already running with remote debugging
-    if is_chrome_debugging_available():
-        print("Chrome already running with remote debugging on port 9222, using that instead of starting a new instance")
+    # Check if Chrome is already running with remote debugging on this port
+    if is_chrome_debugging_available(port):
+        print(f"Chrome already running with remote debugging on port {port}, using that instead of starting a new instance")
         return
 
-    # Close any existing Chrome instances with the debug profile
+    # Close any existing Chrome instances with this debug port
     try:
         subprocess.run(
-            "pkill -f \"chrome.*--remote-debugging-port=9222\"", 
+            f"pkill -f \"chrome.*--remote-debugging-port={port}\"", 
             shell=True, 
             stderr=subprocess.DEVNULL
         )
@@ -68,45 +67,63 @@ def start_chrome(start_url="https://google.com"):
         print("Error: Chrome or Chromium browser not found")
         sys.exit(1)
     
-    print(f"Starting {chrome_bin} with remote debugging...")
+    print(f"Starting {chrome_bin} with remote debugging on port {port}...")
     
     # Start Chrome with remote debugging
     chrome_process = subprocess.Popen(
         [
             chrome_bin,
-            "--remote-debugging-port=9222",
-            "--user-data-dir=/tmp/chrome-debug-profile",
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir=/tmp/chrome-debug-profile-{port}",
             start_url
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
     
+    # Store the process in our global dictionary
+    chrome_processes[port] = chrome_process
+    
     # Give Chrome time to start and fully load
     print(f"Waiting for Chrome to start and load {start_url}...")
     time.sleep(5)
 
-def cleanup(signum=None, frame=None, exit_process=True):
+def cleanup(signum=None, frame=None, exit_process=True, port: Optional[int] = None):
     """
-    Cleanup function to kill Chrome process. Also serves as a signal handler.
+    Cleanup function to kill Chrome process(es). Also serves as a signal handler.
     
     Args:
         signum: Signal number (when used as signal handler)
         frame: Current stack frame (when used as signal handler)
         exit_process (bool): Whether to exit the Python process after cleanup.
                             Set to False when called programmatically.
+        port (int, optional): Specific port to clean up. If None, cleans up all ports.
     """
-    global chrome_process
-    if chrome_process:
-        print("Shutting down Chrome...")
-        chrome_process.terminate()
-        try:
-            chrome_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            chrome_process.kill() 
+    global chrome_processes
+    
+    if port is not None:
+        # Clean up specific port
+        if port in chrome_processes:
+            print(f"Shutting down Chrome on port {port}...")
+            chrome_processes[port].terminate()
+            try:
+                chrome_processes[port].wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                chrome_processes[port].kill()
+            del chrome_processes[port]
+    else:
+        # Clean up all ports
+        for port, process in chrome_processes.items():
+            print(f"Shutting down Chrome on port {port}...")
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        chrome_processes.clear()
     
     if exit_process:
         sys.exit(0)
-    
+
 if __name__ == "__main__":
     start_chrome()
