@@ -12,6 +12,9 @@ import wave
 import pyaudio
 import threading
 import asyncio
+from collections import deque
+from dataclasses import dataclass
+from typing import Optional
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +26,11 @@ STOP_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'stop_listening')
 ABORT_TRIGGER_FILE = os.path.join(TRIGGER_DIR, 'abort_execution')
 STATE_FILE = os.path.join(TRIGGER_DIR, 'listening_state')
 
+@dataclass
+class Task:
+    audio_file: str
+    transcript: Optional[str] = None
+    is_processing: bool = False
 
 class AIVoiceAgent:
     def __init__(self, web_agent=None):
@@ -88,6 +96,11 @@ class AIVoiceAgent:
 
         # Clear any existing trigger files
         self._clear_trigger_files()
+
+        # Initialize task queue
+        self.task_queue = deque()
+        self.queue_lock = threading.Lock()
+        self.processing_event = threading.Event()
 
     def _clear_trigger_files(self):
         """Remove any existing trigger files and initialize state"""
@@ -455,7 +468,25 @@ class AIVoiceAgent:
             if self.abort_event.is_set():
                 print("\nTask aborted before TTS generation", flush=True)
                 return
-                
+            
+            print(response_text, flush=True)
+            
+            # Run TTS in a separate thread
+            tts_thread = threading.Thread(
+                target=self._generate_and_play_tts,
+                args=(response_text,),
+                daemon=True
+            )
+            tts_thread.start()
+            
+            print()  # Add a newline after response
+            self.full_transcript.append({"role": "assistant", "content": response_text})
+        except Exception as e:
+            print(f"\nError during AI response generation: {e}", flush=True)
+
+    def _generate_and_play_tts(self, text):
+        """Generate and play TTS in a separate thread"""
+        try:
             # Get speech speed from environment variable (default to 1.2 if not set)
             speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
             print(f"Using speech speed: {speech_speed}x", flush=True)
@@ -466,26 +497,22 @@ class AIVoiceAgent:
                 similarity_boost=0.75,
                 style=0.0,
                 use_speaker_boost=True,
-                speed=speech_speed  # Apply the speech speed here
+                speed=speech_speed
             )
             
             # Generate the TTS stream
             audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
-                text=response_text,
+                text=text,
                 voice_id="IKne3meq5aSn9XLyUdCD", # charlie
                 model_id="eleven_multilingual_v2",
-                voice_settings=voice_settings  # Pass VoiceSettings object directly
+                voice_settings=voice_settings
             )
-            
-            print(response_text, flush=True)
             
             # Custom streaming with abort checking
             self._stream_with_abort_check(audio_stream)
             
-            print()  # Add a newline after response
-            self.full_transcript.append({"role": "assistant", "content": response_text})
         except Exception as e:
-            print(f"\nError during AI response generation: {e}", flush=True)
+            print(f"\nError during TTS generation and playback: {e}", flush=True)
 
     def _monitor_abort_during_task(self):
         """Monitor for abort signal during task execution"""
@@ -570,21 +597,17 @@ class AIVoiceAgent:
                                 print("Already aborting a task. Please wait...")
                                 continue
                             
-                            # If we're currently processing (not recording), abort the task
-                            if current_state == "processing":
-                                self.abort_current_execution()
-                                continue
-                            
-                            if current_state == "inactive":
-                                # Start listening
-                                with open(STATE_FILE, 'w') as f:
-                                    f.write("active")
-                                touch_file = os.path.join(TRIGGER_DIR, "start_listening")
-                            else:
-                                # Stop listening
+                            # Check if we're currently recording
+                            if current_state == "active":
+                                # Stop recording
                                 with open(STATE_FILE, 'w') as f:
                                     f.write("inactive")
                                 touch_file = os.path.join(TRIGGER_DIR, "stop_listening")
+                            else:
+                                # Start recording (regardless of processing state)
+                                with open(STATE_FILE, 'w') as f:
+                                    f.write("active")
+                                touch_file = os.path.join(TRIGGER_DIR, "start_listening")
                                 
                             # Create the appropriate trigger file
                             with open(touch_file, 'w') as f:
@@ -596,47 +619,27 @@ class AIVoiceAgent:
             keyboard_thread = threading.Thread(target=handle_keyboard_input)
             keyboard_thread.daemon = True
             keyboard_thread.start()
+
+            # Start task processing thread
+            process_thread = threading.Thread(target=lambda: asyncio.run(self._process_tasks()))
+            process_thread.daemon = True
+            process_thread.start()
             
             while True:
                 # Record audio
                 audio_file = self.record_audio()
                 
-                # Set state to processing (to allow abort during processing)
-                with open(STATE_FILE, 'w') as f:
-                    f.write("processing")
+                if audio_file:
+                    # Add task to queue
+                    with self.queue_lock:
+                        task = Task(audio_file=audio_file)
+                        self.task_queue.append(task)
+                        print(f"\nTask added to queue. Queue length: {len(self.task_queue)}")
                     
-                # Monitor for abort during transcription and processing
-                abort_monitor = threading.Thread(target=self._monitor_abort_during_task)
-                abort_monitor.daemon = True
-                abort_monitor.start()
+                    # Signal that there's a new task to process
+                    self.processing_event.set()
                 
-                # Transcribe audio
-                transcript_text = self.transcribe_audio(audio_file)
-                
-                # Check if aborted during transcription
-                if self.abort_event.is_set():
-                    print("\nAborted during transcription", flush=True)
-                    self.abort_event.clear()
-                    continue
-                
-                if not transcript_text or transcript_text.strip() == "":
-                    print("No speech detected. Please try again.")
-                    # Reset state to inactive
-                    with open(STATE_FILE, 'w') as f:
-                        f.write("inactive")
-                    continue
-                
-                # Speak confirmation message with transcript in a separate thread
-                threading.Thread(
-                    target=self._speak_confirmation_message,
-                    args=(transcript_text,),
-                    daemon=True
-                ).start()
-                
-                # Generate AI response asynchronously
-                await self.generate_ai_response(transcript_text)
-                
-                # Reset state to inactive
+                # Reset state to inactive after recording
                 with open(STATE_FILE, 'w') as f:
                     f.write("inactive")
                 
@@ -650,37 +653,80 @@ class AIVoiceAgent:
             # Clean up PyAudio
             self.p.terminate()
 
+    async def _process_tasks(self):
+        """Process tasks from the queue"""
+        while True:
+            # Wait for tasks to be available
+            await asyncio.sleep(0.1)  # Small delay to prevent busy waiting
+            
+            if not self.task_queue:
+                self.processing_event.clear()
+                await asyncio.to_thread(self.processing_event.wait)
+                continue
+            
+            # Get next task
+            with self.queue_lock:
+                task = self.task_queue[0]
+                task.is_processing = True
+            
+            try:
+                # Set state to processing
+                with open(STATE_FILE, 'w') as f:
+                    f.write("processing")
+                
+                # Monitor for abort during transcription and processing
+                abort_monitor = threading.Thread(target=self._monitor_abort_during_task)
+                abort_monitor.daemon = True
+                abort_monitor.start()
+                
+                # Transcribe audio
+                transcript_text = self.transcribe_audio(task.audio_file)
+                task.transcript = transcript_text
+                
+                # Check if aborted during transcription
+                if self.abort_event.is_set():
+                    print("\nAborted during transcription", flush=True)
+                    self.abort_event.clear()
+                    with self.queue_lock:
+                        self.task_queue.popleft()
+                    continue
+                
+                if not transcript_text or transcript_text.strip() == "":
+                    print("No speech detected. Skipping task.")
+                    with self.queue_lock:
+                        self.task_queue.popleft()
+                    continue
+                
+                # Speak confirmation message with transcript in a separate thread
+                threading.Thread(
+                    target=self._speak_confirmation_message,
+                    args=(transcript_text,),
+                    daemon=True
+                ).start()
+                
+                # Generate AI response asynchronously
+                await self.generate_ai_response(transcript_text)
+                
+                # Remove completed task from queue
+                with self.queue_lock:
+                    self.task_queue.popleft()
+                
+            except Exception as e:
+                print(f"Error processing task: {e}")
+                with self.queue_lock:
+                    self.task_queue.popleft()
+            finally:
+                # Reset state to inactive after processing
+                with open(STATE_FILE, 'w') as f:
+                    f.write("inactive")
+
     def _speak_confirmation_message(self, transcript_text):
         """Speak a confirmation message with the transcript in a separate thread"""
         print("Speaking confirmation message...", flush=True)
         confirmation_text = f"Message received: {transcript_text}"
         
-        try:
-            # Get speech speed from environment variable (default to 1.2 if not set)
-            speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
-            
-            # Create voice settings with the specified speed
-            voice_settings = VoiceSettings(
-                stability=0.5,
-                similarity_boost=0.75,
-                style=0.0,
-                use_speaker_boost=True,
-                speed=speech_speed
-            )
-            
-            # Generate the TTS stream for confirmation
-            confirmation_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
-                text=confirmation_text,
-                voice_id="IKne3meq5aSn9XLyUdCD",  # charlie
-                model_id="eleven_multilingual_v2",
-                voice_settings=voice_settings
-            )
-            
-            # Stream the confirmation audio
-            self._stream_with_abort_check(confirmation_stream)
-            
-        except Exception as e:
-            print(f"Error speaking confirmation: {e}", flush=True)
+        # Run TTS in a separate thread
+        self._generate_and_play_tts(confirmation_text)
 
 
 # Direct execution of the script
