@@ -20,4 +20,7 @@ build/
 *.swo
 
 # Environment variables
-.env 
+.env
+
+# Additional files
+.DS_Store 
