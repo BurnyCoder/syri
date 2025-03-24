@@ -25,33 +25,14 @@ STATE_FILE = os.path.join(TRIGGER_DIR, 'listening_state')
 
 
 class AIVoiceAgent:
-    def __init__(self, web_agent=None):
-        # Get API keys from environment variables
-        assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
-        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-        portkey_api_key = os.getenv("PORTKEY_API_KEY")
-        portkey_virtual_key = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
-        
-        # Check if API keys are available
-        if not assemblyai_api_key:
-            raise ValueError("AssemblyAI API key not found. Please set ASSEMBLYAI_API_KEY in your .env file")
-        if not elevenlabs_api_key:
-            raise ValueError("ElevenLabs API key not found. Please set ELEVENLABS_API_KEY in your .env file")
-        if not portkey_api_key:
-            raise ValueError("Portkey API key not found. Please set PORTKEY_API_KEY in your .env file")
-        if not portkey_virtual_key:
-            raise ValueError("Portkey Virtual Key not found. Please set PORTKEY_VIRTUAL_KEY_ANTHROPIC in your .env file")
-            
-        aai.settings.api_key = assemblyai_api_key
-        # Set ElevenLabs API key
-        self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
-        
-        # Store web_agent instance
+    def __init__(self, web_agent=None, task_service=None):
+        """Initialize the voice assistant with optional web agent and task service"""
         self.web_agent = web_agent
-
-        # Create abort event flag
+        self.task_service = task_service
+        self.full_transcript = []
         self.abort_event = threading.Event()
-
+        self.elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        
         # Detect operating system
         self.system = platform.system()
         print(f"Detected operating system: {self.system}")
@@ -75,12 +56,6 @@ class AIVoiceAgent:
         
         # Restore stderr
         self._restore_stderr()
-
-        # Initialize conversation history - no longer needed for web agent
-        # as we're not passing conversation history, but keep for record-keeping
-        self.full_transcript = [
-            {"role": "system", "content": "You are a helpful web browsing assistant called Syri. Provide concise, friendly responses based on your web browsing capabilities."},
-        ]
 
         # Ensure trigger directory exists
         if not os.path.exists(TRIGGER_DIR):
@@ -448,6 +423,12 @@ class AIVoiceAgent:
         abort_monitor.start()
         
         try:
+            # Create a task for this interaction if task service is available
+            task_id = None
+            if self.task_service:
+                task = await self.task_service.create_task(transcript_text)
+                task_id = task.id
+            
             # Use the web_agent instance with await
             response_text = await self.web_agent.run(transcript_text)
             
@@ -484,6 +465,11 @@ class AIVoiceAgent:
             
             print()  # Add a newline after response
             self.full_transcript.append({"role": "assistant", "content": response_text})
+            
+            # Update task status if task service is available
+            if self.task_service and task_id:
+                await self.task_service.process_task(task_id, response_text)
+                
         except Exception as e:
             print(f"\nError during AI response generation: {e}", flush=True)
 
