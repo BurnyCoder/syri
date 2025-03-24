@@ -490,22 +490,12 @@ class AIVoiceAgent:
             # Get speech speed from environment variable (default to 1.2 if not set)
             speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
             print(f"Using speech speed: {speech_speed}x", flush=True)
-            
-            # Create voice settings with the specified speed using VoiceSettings class
-            voice_settings = VoiceSettings(
-                stability=0.5,
-                similarity_boost=0.75,
-                style=0.0,
-                use_speaker_boost=True,
-                speed=speech_speed
-            )
-            
+                        
             # Generate the TTS stream
             audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
                 text=text,
-                voice_id="IKne3meq5aSn9XLyUdCD", # charlie
-                model_id="eleven_multilingual_v2",
-                voice_settings=voice_settings
+                voice_id="JBFqnCBsd6RMkjVDRZzb", 
+                model_id="eleven_multilingual_v2"
             )
             
             # Custom streaming with abort checking
