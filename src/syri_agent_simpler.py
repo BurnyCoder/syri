@@ -459,7 +459,8 @@ class AIVoiceAgent:
             r'\bnew conversation\b',
             r'\bstart (?:a )?new conversation\b',
             r'\bcreate (?:a )?new conversation\b',
-            r'\bopen (?:a )?new conversation\b'
+            r'\bopen (?:a )?new conversation\b',
+            r'\bbegin (?:a )?new conversation\b'
         ]
         
         # Check if any pattern matches
@@ -479,7 +480,7 @@ class AIVoiceAgent:
             r'use (?:conversation|session) (\d+)'
         ]
         
-        # Check if any pattern matches and get the session number
+        # Check if any pattern matches and get the session number from digits
         for pattern in switch_patterns:
             match = re.search(pattern, transcript_text.lower())
             if match:
@@ -487,6 +488,31 @@ class AIVoiceAgent:
                     session_num = int(match.group(1))
                     return session_num
                 except (ValueError, IndexError):
+                    pass
+        
+        # Look for patterns with numbers as words
+        word_number_patterns = [
+            r'switch to (?:conversation|session) (one|two|three|four|five|six|seven|eight|nine|ten)',
+            r'go to (?:conversation|session) (one|two|three|four|five|six|seven|eight|nine|ten)',
+            r'open (?:conversation|session) (one|two|three|four|five|six|seven|eight|nine|ten)',
+            r'use (?:conversation|session) (one|two|three|four|five|six|seven|eight|nine|ten)'
+        ]
+        
+        # Map word numbers to integers
+        word_to_number = {
+            'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+        }
+        
+        # Check for word number patterns
+        for pattern in word_number_patterns:
+            match = re.search(pattern, transcript_text.lower())
+            if match:
+                try:
+                    word_num = match.group(1).lower()
+                    if word_num in word_to_number:
+                        return word_to_number[word_num]
+                except (IndexError):
                     pass
                 
         return None
@@ -703,6 +729,7 @@ class AIVoiceAgent:
         print("  • ./scripts/abort_execution.sh - Abort current task or TTS")
         print("  • Say \"new conversation\" to create a new conversation")
         print("  • Say \"switch to conversation X\" to switch between conversations")
+        print("  • Numbers can be digits (1, 2, 3) or words (one, two, three)")
         
         # Check if Chrome is installed
         if not self._check_chrome_installed():

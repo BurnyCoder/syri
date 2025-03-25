@@ -45,6 +45,7 @@ async def main():
         print("Conversation manager initialized and ready 🟢")
         print("To create additional conversations, say 'new conversation'")
         print("To switch between conversations, say 'switch to conversation [number]'")
+        print("You can also use word numbers like 'switch to conversation one'")
 
         # Create the voice agent, passing the conversation manager
         agent = AIVoiceAgent(conversation_manager=conversation_manager)
