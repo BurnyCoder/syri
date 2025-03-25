@@ -35,9 +35,11 @@ def log_progress(message: str) -> str:
 class WebAgent:
     """Class to manage browser-based agent interactions."""
     
-    def __init__(self, initial_task="Summarize my last gmail"):
+    def __init__(self, initial_task="Summarize my last gmail", port=9222, session_id=None):
         """Initialize the WebAgent with configuration."""
         self.task = initial_task
+        self.port = port
+        self.session_id = session_id or "default"
         
         # Get Portkey configuration from environment variables
         self.portkey_api_base = os.getenv("PORTKEY_API_BASE")
@@ -71,12 +73,14 @@ class WebAgent:
     
     def setup_browser(self, start_url="https://google.com"):
         """Set up a browser instance with remote debugging."""
-        start_chrome(start_url)
+        # Use session-specific CDP port and profile
+        user_data_dir = f"/tmp/chrome-debug-profile-{self.session_id}"
+        start_chrome(start_url, port=self.port, user_data_dir=user_data_dir)
         
         self.browser = Browser(
             config=BrowserConfig(
                 disable_security=True,
-                cdp_url="http://localhost:9222",
+                cdp_url=f"http://localhost:{self.port}",
             ),
         )
         
@@ -87,13 +91,13 @@ class WebAgent:
     async def cleanup(self):
         """Clean up browser resources."""
         if self.browser:
-            logger.info("Cleaning up browser instance...")
+            logger.info(f"Cleaning up browser instance for session {self.session_id}...")
             if self.browser_context:
                 await self.browser_context.close()
                 self.browser_context = None
             await self.browser.close()
             self.browser = None
-            cleanup(exit_process=False)
+            cleanup(port=self.port, exit_process=False)
             # Wait to ensure browser is fully closed
             await asyncio.sleep(3)
     
@@ -164,6 +168,65 @@ class WebAgent:
             # Clean up if requested
             if cleanup_after:
                 await self.cleanup()
+
+class ConversationManager:
+    """Manages multiple WebAgent instances for different conversations."""
+    
+    def __init__(self):
+        """Initialize the conversation manager."""
+        self.conversations = {}
+        self.active_conversation_id = "default"
+        self.next_port = 9222
+        self.next_session_id = 1
+    
+    def _get_next_port(self):
+        """Get the next available port for a new Chrome instance."""
+        port = self.next_port
+        self.next_port += 1
+        return port
+    
+    def _get_next_session_id(self):
+        """Get the next session ID for a new conversation."""
+        session_id = f"session-{self.next_session_id}"
+        self.next_session_id += 1
+        return session_id
+    
+    def create_conversation(self, initial_task="Summarize my last gmail"):
+        """Create a new conversation with a fresh WebAgent."""
+        session_id = self._get_next_session_id()
+        port = self._get_next_port()
+        
+        # Create a new WebAgent for this conversation
+        conversation = WebAgent(initial_task=initial_task, port=port, session_id=session_id)
+        
+        # Store the conversation
+        self.conversations[session_id] = conversation
+        self.active_conversation_id = session_id
+        
+        logger.info(f"Created new conversation with ID: {session_id}")
+        return session_id
+    
+    def get_active_conversation(self):
+        """Get the currently active WebAgent conversation."""
+        return self.conversations.get(self.active_conversation_id)
+    
+    def switch_conversation(self, conversation_id):
+        """Switch to a different conversation."""
+        if conversation_id in self.conversations:
+            self.active_conversation_id = conversation_id
+            logger.info(f"Switched to conversation: {conversation_id}")
+            return True
+        return False
+    
+    def get_conversation_ids(self):
+        """Get a list of all available conversation IDs."""
+        return list(self.conversations.keys())
+    
+    async def cleanup_all(self):
+        """Clean up all conversations."""
+        for session_id, conversation in self.conversations.items():
+            logger.info(f"Cleaning up conversation: {session_id}")
+            await conversation.cleanup()
 
 async def main():
     browser_agent = WebAgent()

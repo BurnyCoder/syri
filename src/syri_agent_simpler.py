@@ -14,6 +14,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 import pygame
+import re
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,7 +33,7 @@ class Task:
     is_processing: bool = False
 
 class AIVoiceAgent:
-    def __init__(self, web_agent=None):
+    def __init__(self, conversation_manager=None):
         # Get API keys from environment variables
         assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
         openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -56,9 +57,9 @@ class AIVoiceAgent:
         # Initialize pygame mixer for audio playback
         pygame.mixer.init()
         
-        # Store web_agent instance
-        self.web_agent = web_agent
-
+        # Store conversation manager
+        self.conversation_manager = conversation_manager
+        
         # Create abort event flag
         self.abort_event = threading.Event()
 
@@ -445,15 +446,121 @@ class AIVoiceAgent:
         self.abort_event.set()
         # Reset the abort event after a short delay to allow tasks to be aborted
         threading.Timer(1.0, self.abort_event.clear).start()
-        self.web_agent.agent.stop()
+        
+        # Stop the current web agent if it exists
+        active_conversation = self.conversation_manager.get_active_conversation()
+        if active_conversation and active_conversation.agent:
+            active_conversation.agent.stop()
+
+    def _check_for_new_conversation(self, transcript_text):
+        """Check if the user wants to start a new conversation"""
+        # Check for phrases like "new conversation", "start new conversation", etc.
+        new_conversation_patterns = [
+            r'\bnew conversation\b',
+            r'\bstart (?:a )?new conversation\b',
+            r'\bcreate (?:a )?new conversation\b',
+            r'\bopen (?:a )?new conversation\b'
+        ]
+        
+        # Check if any pattern matches
+        for pattern in new_conversation_patterns:
+            if re.search(pattern, transcript_text.lower()):
+                return True
+                
+        return False
+
+    def _check_for_switch_conversation(self, transcript_text):
+        """Check if the user wants to switch to a specific conversation"""
+        # Look for patterns like "switch to conversation 1" or "go to session 2"
+        switch_patterns = [
+            r'switch to (?:conversation|session) (\d+)',
+            r'go to (?:conversation|session) (\d+)',
+            r'open (?:conversation|session) (\d+)',
+            r'use (?:conversation|session) (\d+)'
+        ]
+        
+        # Check if any pattern matches and get the session number
+        for pattern in switch_patterns:
+            match = re.search(pattern, transcript_text.lower())
+            if match:
+                try:
+                    session_num = int(match.group(1))
+                    return session_num
+                except (ValueError, IndexError):
+                    pass
+                
+        return None
 
     async def generate_ai_response(self, transcript_text):
-        """Generate AI response using the web agent"""
+        """Generate AI response using the conversation manager and web agent"""
         self.full_transcript.append({"role": "user", "content": transcript_text})
         print(f"\nUser: {transcript_text}")
 
         # Reset abort event before starting
         self.abort_event.clear()
+        
+        # Check if the user wants to start a new conversation
+        if self._check_for_new_conversation(transcript_text):
+            # Create a new conversation
+            session_id = self.conversation_manager.create_conversation()
+            response_text = f"Created new conversation with ID {session_id}. You are now using this conversation."
+            print(f"\nNew conversation: {response_text}")
+            
+            # Run TTS to confirm the new conversation
+            tts_thread = threading.Thread(
+                target=self._generate_and_play_tts,
+                args=(response_text,),
+                daemon=True
+            )
+            tts_thread.start()
+            
+            self.full_transcript.append({"role": "assistant", "content": response_text})
+            return
+            
+        # Check if the user wants to switch to a specific conversation
+        session_num = self._check_for_switch_conversation(transcript_text)
+        if session_num is not None:
+            # Get all available session IDs
+            session_ids = self.conversation_manager.get_conversation_ids()
+            
+            # Check if the requested session exists
+            if session_num <= len(session_ids) and session_num > 0:
+                # Switch to the requested conversation (adjust for 0-based indexing)
+                target_session_id = session_ids[session_num - 1]
+                self.conversation_manager.switch_conversation(target_session_id)
+                response_text = f"Switched to conversation {session_num} (ID: {target_session_id})"
+            else:
+                response_text = f"Could not find conversation {session_num}. Available conversations: {len(session_ids)}"
+            
+            print(f"\nSwitch conversation: {response_text}")
+            
+            # Run TTS to confirm the switch
+            tts_thread = threading.Thread(
+                target=self._generate_and_play_tts,
+                args=(response_text,),
+                daemon=True
+            )
+            tts_thread.start()
+            
+            self.full_transcript.append({"role": "assistant", "content": response_text})
+            return
+            
+        # Get the active web agent conversation
+        active_conversation = self.conversation_manager.get_active_conversation()
+        if not active_conversation:
+            response_text = "No active conversation available. Please create a new conversation."
+            print(f"\nNo conversation: {response_text}")
+            
+            # Run TTS to indicate the error
+            tts_thread = threading.Thread(
+                target=self._generate_and_play_tts,
+                args=(response_text,),
+                daemon=True
+            )
+            tts_thread.start()
+            
+            self.full_transcript.append({"role": "assistant", "content": response_text})
+            return
 
         print("\nWeb Agent Response:", flush=True)
         
@@ -463,8 +570,8 @@ class AIVoiceAgent:
         abort_monitor.start()
         
         try:
-            # Use the web_agent instance with await
-            response_text = await self.web_agent.run(transcript_text)
+            # Use the active web agent conversation with await
+            response_text = await active_conversation.run(transcript_text)
             
             # If task was aborted, return early
             if self.abort_event.is_set():
@@ -594,6 +701,8 @@ class AIVoiceAgent:
         print("  • ./scripts/stop_listening.sh - Stop recording and process request")
         print("  • ./scripts/toggle_listening.sh - Toggle between start/stop")
         print("  • ./scripts/abort_execution.sh - Abort current task or TTS")
+        print("  • Say \"new conversation\" to create a new conversation")
+        print("  • Say \"switch to conversation X\" to switch between conversations")
         
         # Check if Chrome is installed
         if not self._check_chrome_installed():
@@ -673,6 +782,10 @@ class AIVoiceAgent:
         finally:
             # Clean up PyAudio
             self.p.terminate()
+            
+            # Clean up all conversations
+            if self.conversation_manager:
+                asyncio.run(self.conversation_manager.cleanup_all())
 
     async def _process_tasks(self):
         """Process tasks from the queue"""
@@ -754,10 +867,16 @@ class AIVoiceAgent:
 if __name__ == "__main__":
     try:
         print("Running Syri agent directly. For a better experience, use: python run.py")
-        ai_voice_agent = AIVoiceAgent()
+        from src.browser_agent.web_agent import ConversationManager
+        
+        # Create conversation manager and initialize first conversation
+        conversation_manager = ConversationManager()
+        conversation_manager.create_conversation()
+        
+        ai_voice_agent = AIVoiceAgent(conversation_manager=conversation_manager)
         asyncio.run(ai_voice_agent.start_session())
         
     except KeyboardInterrupt:
         print("\nExiting Syri Voice Assistant...")
     except Exception as e:
-        print(f"Error: {e}") 
+        print(f"Error: {e}")
