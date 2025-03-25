@@ -1,7 +1,5 @@
 import assemblyai as aai
-from elevenlabs.client import ElevenLabs
-from elevenlabs import stream
-from elevenlabs.types import VoiceSettings
+from openai import OpenAI
 import os
 import sys
 import platform
@@ -15,6 +13,7 @@ import asyncio
 from collections import deque
 from dataclasses import dataclass
 from typing import Optional
+import pygame
 
 # Load environment variables from .env file
 load_dotenv()
@@ -36,23 +35,26 @@ class AIVoiceAgent:
     def __init__(self, web_agent=None):
         # Get API keys from environment variables
         assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
-        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
         portkey_api_key = os.getenv("PORTKEY_API_KEY")
         portkey_virtual_key = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
         
         # Check if API keys are available
         if not assemblyai_api_key:
             raise ValueError("AssemblyAI API key not found. Please set ASSEMBLYAI_API_KEY in your .env file")
-        if not elevenlabs_api_key:
-            raise ValueError("ElevenLabs API key not found. Please set ELEVENLABS_API_KEY in your .env file")
+        if not openai_api_key:
+            raise ValueError("OpenAI API key not found. Please set OPENAI_API_KEY in your .env file")
         if not portkey_api_key:
             raise ValueError("Portkey API key not found. Please set PORTKEY_API_KEY in your .env file")
         if not portkey_virtual_key:
             raise ValueError("Portkey Virtual Key not found. Please set PORTKEY_VIRTUAL_KEY_ANTHROPIC in your .env file")
             
         aai.settings.api_key = assemblyai_api_key
-        # Set ElevenLabs API key
-        self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+        # Set OpenAI client
+        self.openai_client = OpenAI(api_key=openai_api_key)
+        
+        # Initialize pygame mixer for audio playback
+        pygame.mixer.init()
         
         # Store web_agent instance
         self.web_agent = web_agent
@@ -491,28 +493,59 @@ class AIVoiceAgent:
             speech_speed = float(os.getenv("SYRI_TTS_SPEED", 1.2))
             print(f"Using speech speed: {speech_speed}x", flush=True)
             
-            # Create voice settings with the specified speed using VoiceSettings class
-            voice_settings = VoiceSettings(
-                stability=0.5,
-                similarity_boost=0.75,
-                style=0.0,
-                use_speaker_boost=True,
+            # Get TTS voice from environment variable (default to "coral")
+            tts_voice = os.getenv("SYRI_TTS_VOICE", "coral")
+            print(f"Using voice: {tts_voice}", flush=True)
+            
+            # Create a temporary file for the audio
+            temp_audio_file = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+            temp_audio_path = temp_audio_file.name
+            temp_audio_file.close()
+            
+            # Generate TTS using OpenAI's TTS API
+            response = self.openai_client.audio.speech.create(
+                model="gpt-4o-mini-tts",
+                voice=tts_voice,
+                input=text,
                 speed=speech_speed
             )
             
-            # Generate the TTS stream
-            audio_stream = self.elevenlabs_client.text_to_speech.convert_as_stream(
-                text=text,
-                voice_id="IKne3meq5aSn9XLyUdCD", # charlie
-                model_id="eleven_multilingual_v2",
-                voice_settings=voice_settings
-            )
+            # Save the audio to the temp file
+            response.stream_to_file(temp_audio_path)
             
-            # Custom streaming with abort checking
-            self._stream_with_abort_check(audio_stream)
+            # Play the audio with abort check capability
+            self._play_audio_with_abort_check(temp_audio_path)
+            
+            # Clean up temp file after playback
+            try:
+                os.unlink(temp_audio_path)
+            except Exception as e:
+                print(f"\nWarning: Could not delete temporary audio file: {e}", flush=True)
             
         except Exception as e:
             print(f"\nError during TTS generation and playback: {e}", flush=True)
+
+    def _play_audio_with_abort_check(self, audio_file_path):
+        """Play audio file with periodic checks for abort signal using pygame"""
+        try:
+            # Load the audio file
+            pygame.mixer.music.load(audio_file_path)
+            pygame.mixer.music.play()
+            
+            # Check for abort while playing
+            while pygame.mixer.music.get_busy():
+                if self.abort_event.is_set() or self.check_abort_trigger():
+                    # If abort signal detected, stop playback
+                    if not self.abort_event.is_set():
+                        self.abort_current_execution()
+                    pygame.mixer.music.stop()
+                    print("\nTTS playback aborted", flush=True)
+                    break
+                # Small delay to prevent high CPU usage
+                time.sleep(0.1)
+            
+        except Exception as e:
+            print(f"\nError during audio playback: {e}", flush=True)
 
     def _monitor_abort_during_task(self):
         """Monitor for abort signal during task execution"""
@@ -523,23 +556,11 @@ class AIVoiceAgent:
             time.sleep(0.2)  # Check every 200ms
 
     def _stream_with_abort_check(self, audio_stream):
-        """Stream audio with periodic checks for abort signal"""
-        try:
-            # Use a generator to wrap the stream and check for aborts
-            def stream_with_checks():
-                for chunk in audio_stream:
-                    if self.abort_event.is_set() or self.check_abort_trigger():
-                        # If abort signal detected, stop streaming
-                        if not self.abort_event.is_set():
-                            self.abort_current_execution()
-                        print("\nTTS playback aborted", flush=True)
-                        break
-                    yield chunk
-            
-            # Pass the wrapped generator to the stream function
-            stream(stream_with_checks())
-        except Exception as e:
-            print(f"\nError during audio streaming: {e}", flush=True)
+        """
+        Legacy method maintained for compatibility.
+        This redirects to the new audio playback method.
+        """
+        print("\nWarning: Using legacy streaming method. This is no longer active with OpenAI TTS.", flush=True)
 
     def _check_chrome_installed(self):
         """Check if Chrome is installed and available"""
