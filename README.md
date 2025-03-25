@@ -3,7 +3,7 @@
 An open-source AI voice assistant that uses:
 - AssemblyAI for speech-to-text
 - Web browser-based agent for AI response generation (using Claude 3.7 Sonnet)
-- ElevenLabs for text-to-speech
+- OpenAI for text-to-speech
 
 This project enables a fully conversational AI experience similar to Siri, but using powerful AI models, a web browser agent, and high-quality audio APIs.
 
@@ -13,7 +13,7 @@ This project enables a fully conversational AI experience similar to Siri, but u
 
 1. **API Keys:**
    - Sign up for a free [AssemblyAI API Key](https://www.assemblyai.com)
-   - Sign up for [ElevenLabs](https://www.elevenlabs.io) to get an API key
+   - Sign up for [OpenAI](https://platform.openai.com) to get an API key
    - Sign up for [Portkey](https://portkey.ai) to get API keys for Claude 3.7 Sonnet
 
 2. **Install PortAudio** (required for audio recording):
@@ -42,7 +42,7 @@ uv sync
 2. Edit the `.env` file and replace the placeholder values with your actual API keys:
    ```
    ASSEMBLYAI_API_KEY=your_actual_assemblyai_key_here
-   ELEVENLABS_API_KEY=your_actual_elevenlabs_key_here
+   OPENAI_API_KEY=your_actual_openai_key_here
    PORTKEY_API_KEY=your_actual_portkey_key_here
    PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_actual_portkey_virtual_key_here
 
@@ -70,7 +70,7 @@ When you speak to Syri:
 2. The recording is transcribed to text using AssemblyAI
 3. The transcribed text is sent to a web agent that runs Chrome browser automation
 4. The web agent uses Claude 3.7 Sonnet through Portkey to generate responses
-5. The response is converted to speech using ElevenLabs
+5. The response is converted to speech using OpenAI's TTS API
 
 ## License
 
