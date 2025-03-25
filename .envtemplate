@@ -5,9 +5,9 @@
 # Get yours at: https://www.assemblyai.com
 ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 
-# ElevenLabs API Key for text-to-speech
-# Get yours at: https://www.elevenlabs.io
-ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
+# OpenAI API Key for text-to-speech
+# Get yours at: https://platform.openai.com
+OPENAI_API_KEY=your_openai_api_key_here
 
 # Portkey API Key for Claude 3.7 Sonnet
 # Get yours at: https://portkey.ai
@@ -21,4 +21,7 @@ PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_portkey_virtual_key_for_anthropic_here
 
 # Text-to-Speech Configuration (Optional)
 # -----------------------------------------
-# SYRI_TTS_SPEED=1.2
+# TTS voice options: alloy, echo, fable, onyx, nova, shimmer, coral
+SYRI_TTS_VOICE=coral
+# TTS speed multiplier
+SYRI_TTS_SPEED=1.2
