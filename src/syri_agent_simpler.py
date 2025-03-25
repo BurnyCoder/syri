@@ -729,7 +729,6 @@ class AIVoiceAgent:
         print("  • ./scripts/abort_execution.sh - Abort current task or TTS")
         print("  • Say \"new conversation\" to create a new conversation")
         print("  • Say \"switch to conversation X\" to switch between conversations")
-        print("  • Numbers can be digits (1, 2, 3) or words (one, two, three)")
         
         # Check if Chrome is installed
         if not self._check_chrome_installed():
