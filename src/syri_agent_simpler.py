@@ -646,6 +646,20 @@ class AIVoiceAgent:
             # Save the audio to the temp file
             response.stream_to_file(temp_audio_path)
             
+            # Wait for any currently playing audio to finish before playing new audio
+            while pygame.mixer.music.get_busy():
+                # Check for abort while waiting
+                if self.abort_event.is_set() or self.check_abort_trigger():
+                    if not self.abort_event.is_set():
+                        self.abort_current_execution()
+                    print("\nWaiting for audio playback aborted", flush=True)
+                    try:
+                        os.unlink(temp_audio_path)  # Clean up the file since we won't play it
+                    except Exception:
+                        pass
+                    return
+                time.sleep(0.1)
+            
             # Play the audio with abort check capability
             self._play_audio_with_abort_check(temp_audio_path)
             
