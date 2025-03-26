@@ -126,8 +126,38 @@ class WebAgent:
             result = await self.agent.run()
             # Handle case where agent.run() returns None (after consecutive failures)
             if result is None:
-                logger.warning("There was an error with the agent. Please try again.")
-                return "There was an error with the agent. Please try again?"
+                logger.warning("The web agent encountered failures. Resetting and trying again...")
+                
+                # Reset the agent instance to recover from the error
+                try:
+                    # Clean up the existing agent and reset browser context
+                    if self.agent:
+                        self.agent = None
+                    
+                    # Reinitialize the agent with a new instance
+                    logger.info("Creating a new agent instance after failure...")
+                    self.agent = Agent(
+                        task=task,
+                        llm=self.llm,
+                        controller=self.controller,
+                        browser=self.browser,
+                        browser_context=self.browser_context,
+                    )
+                    
+                    # Run the agent again with the same task
+                    logger.info("Retrying the task with the fresh agent...")
+                    result = await self.agent.run()
+                    
+                    # If it still fails, return a more detailed error message
+                    if result is None:
+                        logger.error("Web agent failed again after reset attempt.")
+                        return "The browser agent couldn't complete this task after multiple attempts. Could you please try a different request or simplify your current one?"
+                except Exception as reset_error:
+                    logger.error(f"Error while trying to reset agent: {reset_error}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    return f"There was an error with the web agent that couldn't be recovered from. Please try a different request."
+            
             final_answer = result.final_result()
             return final_answer
                 
