@@ -25,3 +25,5 @@ PORTKEY_VIRTUAL_KEY_ANTHROPIC=your_portkey_virtual_key_for_anthropic_here
 SYRI_TTS_VOICE=coral
 # TTS speed multiplier
 SYRI_TTS_SPEED=1.2
+
+WEB_AGENT_PROMPT="If asked to draft an email, only draft it and do not send it."
