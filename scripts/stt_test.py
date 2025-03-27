@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Speech-to-Text Test Script using AssemblyAI
+Speech-to-Text Test Script using OpenAI
 
 This script provides a simple demonstration of converting speech to text
-using the AssemblyAI API. It records audio from your microphone and
+using the OpenAI Whisper API. It records audio from your microphone and
 then transcribes it.
 
 Usage:
     python stt_test.py
 
 Requirements:
-    - An AssemblyAI API key in .env file (ASSEMBLYAI_API_KEY)
-    - assemblyai, pyaudio packages installed
+    - An OpenAI API key in .env file (OPENAI_API_KEY)
+    - openai, pyaudio packages installed
 """
 
 import os

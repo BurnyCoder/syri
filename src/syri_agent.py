@@ -1,4 +1,3 @@
-import assemblyai as aai
 from openai import OpenAI
 import os
 import sys
@@ -35,14 +34,11 @@ class Task:
 class AIVoiceAgent:
     def __init__(self, conversation_manager=None):
         # Get API keys from environment variables
-        assemblyai_api_key = os.getenv("ASSEMBLYAI_API_KEY")
         openai_api_key = os.getenv("OPENAI_API_KEY")
         portkey_api_key = os.getenv("PORTKEY_API_KEY")
         portkey_virtual_key = os.getenv("PORTKEY_VIRTUAL_KEY_ANTHROPIC")
         
         # Check if API keys are available
-        if not assemblyai_api_key:
-            raise ValueError("AssemblyAI API key not found. Please set ASSEMBLYAI_API_KEY in your .env file")
         if not openai_api_key:
             raise ValueError("OpenAI API key not found. Please set OPENAI_API_KEY in your .env file")
         if not portkey_api_key:
@@ -50,7 +46,6 @@ class AIVoiceAgent:
         if not portkey_virtual_key:
             raise ValueError("Portkey Virtual Key not found. Please set PORTKEY_VIRTUAL_KEY_ANTHROPIC in your .env file")
             
-        aai.settings.api_key = assemblyai_api_key
         # Set OpenAI client
         self.openai_client = OpenAI(api_key=openai_api_key)
         
@@ -400,7 +395,7 @@ class AIVoiceAgent:
 
     def transcribe_audio(self, audio_file):
         """
-        Transcribe the recorded audio using AssemblyAI
+        Transcribe the recorded audio using OpenAI
 
         Returns:
             str: The transcribed text
@@ -410,13 +405,15 @@ class AIVoiceAgent:
 
         print("Transcribing audio...")
 
-        # Create a transcriber and set a language model to get formatting
-        transcriber = aai.Transcriber()
-
-        # Start the transcription
+        # Use OpenAI's transcription service
         try:
-            transcript = transcriber.transcribe(audio_file)
+            with open(audio_file, "rb") as audio:
+                transcript = self.openai_client.audio.transcriptions.create(
+                    model="gpt-4o-transcribe", 
+                    file=audio
+                )
             print("Audio transcription successful\n")
+            transcript_text = transcript.text
         except Exception as e:
             print(f"Error transcribing audio: {e}")
             return None
@@ -427,7 +424,7 @@ class AIVoiceAgent:
         except Exception as e:
             print(f"Warning: Could not delete temporary file {audio_file}: {e}")
         
-        return transcript.text
+        return transcript_text
     
     def check_abort_trigger(self):
         """Check if abort trigger file exists"""
