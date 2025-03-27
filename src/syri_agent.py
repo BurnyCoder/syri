@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Optional
 import pygame
 import re
+from src.browser_agent.conversation_manager import ConversationManager
 
 # Load environment variables from .env file
 load_dotenv()
@@ -904,7 +905,7 @@ class AIVoiceAgent:
 if __name__ == "__main__":
     try:
         print("Running Syri agent directly. For a better experience, use: python run.py")
-        from src.browser_agent.web_agent import ConversationManager
+        from src.browser_agent.conversation_manager import ConversationManager
         
         # Create conversation manager and initialize first conversation
         conversation_manager = ConversationManager()

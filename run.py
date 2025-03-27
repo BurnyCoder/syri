@@ -10,7 +10,7 @@ import time
 import sys
 import asyncio
 from src.syri_agent import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
-from src.browser_agent.web_agent import ConversationManager
+from src.browser_agent.conversation_manager import ConversationManager
 
 def display_welcome():
     """Display welcome message and instructions."""
@@ -25,10 +25,8 @@ def display_welcome():
     time.sleep(1)
 
 
-async def main():
-    """Main entry point for the voice assistant."""
-    display_welcome()
-
+def setup_triggers():
+    """Set up trigger directory and clean up any existing trigger files."""
     # Ensure trigger directory exists
     if not os.path.exists(TRIGGER_DIR):
         os.makedirs(TRIGGER_DIR)
@@ -36,6 +34,14 @@ async def main():
     # Remove any existing abort trigger file from previous runs
     if os.path.exists(ABORT_TRIGGER_FILE):
         os.remove(ABORT_TRIGGER_FILE)
+
+
+async def main():
+    """Main entry point for the voice assistant."""
+    display_welcome()
+
+    # Set up trigger functionality
+    setup_triggers()
 
     try:
         # Initialize conversation manager and create first conversation
