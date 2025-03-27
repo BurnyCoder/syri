@@ -449,6 +449,57 @@ class AIVoiceAgent:
         active_conversation = self.conversation_manager.get_active_conversation()
         if active_conversation and active_conversation.agent:
             active_conversation.agent.stop()
+            
+    def restart_agent(self):
+        """Restart the agent by reinitializing it to reset memory"""
+        print("\nRestarting agent...", flush=True)
+        
+        # First abort any current execution
+        self.abort_current_execution()
+        
+        # Clear task queue
+        with self.queue_lock:
+            self.task_queue.clear()
+            
+        # Reset conversations through conversation manager
+        active_conversation = self.conversation_manager.get_active_conversation()
+        if active_conversation:
+            # Save session ID to reuse
+            session_id = active_conversation.session_id
+            
+            # Clean up existing agent
+            if active_conversation.agent:
+                # WebAgent has cleanup as async method
+                if hasattr(active_conversation.agent, 'cleanup'):
+                    # Create a new event loop for cleanup since we can't use asyncio.create_task here
+                    loop = asyncio.new_event_loop()
+                    try:
+                        loop.run_until_complete(active_conversation.agent.cleanup())
+                    except Exception as e:
+                        print(f"Error during agent cleanup: {e}")
+                    finally:
+                        loop.close()
+                active_conversation.agent = None
+            
+            # Reinitialize agent for this conversation
+            try:
+                from src.browser_agent.web_agent import WebAgent
+                port = 9222 + int(session_id.split('-')[1])  # Get port from session ID
+                active_conversation.agent = WebAgent(port=port, session_id=session_id)
+                print(f"Reinitialized agent for session {session_id} on port {port}")
+            except Exception as e:
+                print(f"Error reinitializing agent: {e}")
+            
+        # Confirm restart with TTS
+        try:
+            tts_thread = threading.Thread(
+                target=self._generate_and_play_tts,
+                args=("Agent has been restarted. Memory has been reset.",),
+                daemon=True
+            )
+            tts_thread.start()
+        except Exception as e:
+            print(f"Error starting TTS thread: {e}")
 
     def _check_for_new_conversation(self, transcript_text):
         """Check if the user wants to start a new conversation"""
@@ -514,6 +565,24 @@ class AIVoiceAgent:
                     pass
                 
         return None
+    
+    def _check_for_stop_command(self, transcript_text):
+        """Check if the user issued a stop command"""
+        stop_patterns = [
+            r'\bstop\b',
+            r'\bstop command\b',
+            r'\bstop now\b',
+            r'\bhalt\b',
+            r'\bend\b',
+            r'\bterminate\b'
+        ]
+        
+        # Check if any pattern matches
+        for pattern in stop_patterns:
+            if re.search(pattern, transcript_text.lower()):
+                return True
+                
+        return False
 
     async def generate_ai_response(self, transcript_text):
         """Generate AI response using the conversation manager and web agent"""
@@ -741,6 +810,7 @@ class AIVoiceAgent:
         print("  • ./scripts/abort_execution.sh - Abort current task or TTS")
         print("  • Say \"new conversation\" to create a new conversation")
         print("  • Say \"switch to conversation X\" to switch between conversations")
+        print("  • Say \"stop\" to restart the agent and reset its memory")
         
         # Check if Chrome is installed
         if not self._check_chrome_installed():
@@ -798,14 +868,37 @@ class AIVoiceAgent:
                 audio_file = self.record_audio()
                 
                 if audio_file:
-                    # Add task to queue
-                    with self.queue_lock:
-                        task = Task(audio_file=audio_file)
-                        self.task_queue.append(task)
-                        print(f"\nTask added to queue. Queue length: {len(self.task_queue)}")
+                    # Set state to processing
+                    with open(STATE_FILE, 'w') as f:
+                        f.write("processing")
                     
-                    # Signal that there's a new task to process
-                    self.processing_event.set()
+                    # Transcribe audio first
+                    transcript_text = self.transcribe_audio(audio_file)
+                    
+                    if not transcript_text or transcript_text.strip() == "":
+                        print("No speech detected. Skipping task.")
+                    else:
+                        print(f"\nTranscript: {transcript_text}")
+                        
+                        # Check if it's a stop command
+                        if self._check_for_stop_command(transcript_text):
+                            print("Stop command detected. Restarting agent...")
+                            self.restart_agent()
+                        else:
+                            # For other commands, add to task queue
+                            with self.queue_lock:
+                                task = Task(audio_file=None, transcript=transcript_text)
+                                self.task_queue.append(task)
+                                print(f"\nTask added to queue. Queue length: {len(self.task_queue)}")
+                            
+                            # Signal that there's a new task to process
+                            self.processing_event.set()
+                    
+                    # Clean up audio file since it's already transcribed
+                    try:
+                        os.unlink(audio_file)
+                    except Exception as e:
+                        print(f"Warning: Could not delete temporary file {audio_file}: {e}")
                 
                 # Reset state to inactive after recording
                 with open(STATE_FILE, 'w') as f:
@@ -837,36 +930,47 @@ class AIVoiceAgent:
                 continue
             
             # Get next task
+            task = None
             with self.queue_lock:
-                task = self.task_queue[0]
-                task.is_processing = True
+                if self.task_queue:  # Double-check queue isn't empty (could be cleared by restart)
+                    task = self.task_queue[0]
+                    task.is_processing = True
             
+            # Skip if task was removed while waiting
+            if not task:
+                continue
+                
             try:
                 # Set state to processing
                 with open(STATE_FILE, 'w') as f:
                     f.write("processing")
                 
-                # Monitor for abort during transcription and processing
+                # Monitor for abort during processing
                 abort_monitor = threading.Thread(target=self._monitor_abort_during_task)
                 abort_monitor.daemon = True
                 abort_monitor.start()
                 
-                # Transcribe audio
-                transcript_text = self.transcribe_audio(task.audio_file)
-                task.transcript = transcript_text
+                # Get transcript text (either from task or transcribe audio)
+                transcript_text = task.transcript
+                if not transcript_text and task.audio_file:
+                    # Transcribe audio if no transcript is available
+                    transcript_text = self.transcribe_audio(task.audio_file)
+                    task.transcript = transcript_text
                 
                 # Check if aborted during transcription
                 if self.abort_event.is_set():
                     print("\nAborted during transcription", flush=True)
                     self.abort_event.clear()
                     with self.queue_lock:
-                        self.task_queue.popleft()
+                        if self.task_queue:  # Check again before removing
+                            self.task_queue.popleft()
                     continue
                 
                 if not transcript_text or transcript_text.strip() == "":
                     print("No speech detected. Skipping task.")
                     with self.queue_lock:
-                        self.task_queue.popleft()
+                        if self.task_queue:  # Check again before removing
+                            self.task_queue.popleft()
                     continue
                 
                 # Speak confirmation message with transcript in a separate thread
@@ -881,12 +985,14 @@ class AIVoiceAgent:
                 
                 # Remove completed task from queue
                 with self.queue_lock:
-                    self.task_queue.popleft()
+                    if self.task_queue:  # Check again before removing
+                        self.task_queue.popleft()
                 
             except Exception as e:
                 print(f"Error processing task: {e}")
                 with self.queue_lock:
-                    self.task_queue.popleft()
+                    if self.task_queue:  # Check again before removing
+                        self.task_queue.popleft()
             finally:
                 # Reset state to inactive after processing
                 with open(STATE_FILE, 'w') as f:
