@@ -461,45 +461,64 @@ class AIVoiceAgent:
         with self.queue_lock:
             self.task_queue.clear()
             
-        # Reset conversations through conversation manager
-        active_conversation = self.conversation_manager.get_active_conversation()
-        if active_conversation:
-            # Save session ID to reuse
-            session_id = active_conversation.session_id
-            
-            # Clean up existing agent
-            if active_conversation.agent:
-                # WebAgent has cleanup as async method
-                if hasattr(active_conversation.agent, 'cleanup'):
-                    # Create a new event loop for cleanup since we can't use asyncio.create_task here
-                    loop = asyncio.new_event_loop()
-                    try:
-                        loop.run_until_complete(active_conversation.agent.cleanup())
-                    except Exception as e:
-                        print(f"Error during agent cleanup: {e}")
-                    finally:
-                        loop.close()
-                active_conversation.agent = None
-            
-            # Reinitialize agent for this conversation
-            try:
-                from src.browser_agent.web_agent import WebAgent
-                port = 9222 + int(session_id.split('-')[1])  # Get port from session ID
-                active_conversation.agent = WebAgent(port=port, session_id=session_id)
-                print(f"Reinitialized agent for session {session_id} on port {port}")
-            except Exception as e:
-                print(f"Error reinitializing agent: {e}")
-            
-        # Confirm restart with TTS
         try:
+            # Get active conversation from manager
+            active_conversation = self.conversation_manager.get_active_conversation()
+            if active_conversation:
+                # Save session ID and other info before cleanup
+                session_id = active_conversation.session_id
+                port = active_conversation.port  # Store the port
+                
+                # Clean up existing agent
+                if hasattr(active_conversation, 'agent') and active_conversation.agent:
+                    # WebAgent has cleanup as async method
+                    if hasattr(active_conversation.agent, 'cleanup'):
+                        # Create a new event loop for cleanup
+                        loop = asyncio.new_event_loop()
+                        try:
+                            loop.run_until_complete(active_conversation.agent.cleanup())
+                        except Exception as e:
+                            print(f"Error during agent cleanup: {e}")
+                        finally:
+                            loop.close()
+                
+                # Remove the active conversation from the manager
+                self.conversation_manager.conversations.pop(session_id, None)
+                
+                # Create a completely new conversation with the same ID
+                try:
+                    # Re-add the conversation with same ID to retain correct port mapping
+                    from src.browser_agent.web_agent import WebAgent
+                    new_agent = WebAgent(port=port, session_id=session_id)
+                    self.conversation_manager.conversations[session_id] = new_agent
+                    self.conversation_manager.active_conversation_id = session_id
+                    print(f"Successfully reinitialized agent for session {session_id} on port {port}")
+                except Exception as e:
+                    print(f"Error recreating agent: {e}")
+                    # If recreation fails, create a brand new conversation as fallback
+                    self.conversation_manager.create_conversation()
+                    print("Created a new conversation as fallback")
+            else:
+                # No active conversation, create a new one
+                self.conversation_manager.create_conversation()
+                print("Created a new conversation")
+                
+            # Confirm restart with TTS
             tts_thread = threading.Thread(
                 target=self._generate_and_play_tts,
                 args=("Agent has been restarted. Memory has been reset.",),
                 daemon=True
             )
             tts_thread.start()
+            
         except Exception as e:
-            print(f"Error starting TTS thread: {e}")
+            print(f"Error during agent restart: {e}")
+            # Try to create a new conversation as last resort
+            try:
+                self.conversation_manager.create_conversation()
+                print("Created a new conversation as error recovery")
+            except Exception as e2:
+                print(f"Critical error during recovery: {e2}")
 
     def _check_for_new_conversation(self, transcript_text):
         """Check if the user wants to start a new conversation"""
@@ -971,6 +990,16 @@ class AIVoiceAgent:
                     with self.queue_lock:
                         if self.task_queue:  # Check again before removing
                             self.task_queue.popleft()
+                    continue
+                
+                # Double-check for stop command (in case it wasn't caught earlier)
+                if self._check_for_stop_command(transcript_text):
+                    print("Stop command detected during task processing. Restarting agent...")
+                    with self.queue_lock:
+                        if self.task_queue:  # Clear current task
+                            self.task_queue.popleft()
+                    # Restart agent and skip further processing
+                    self.restart_agent()
                     continue
                 
                 # Speak confirmation message with transcript in a separate thread
