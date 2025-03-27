@@ -9,8 +9,11 @@ import os
 import time
 import sys
 import asyncio
-from src.syri_agent import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
+
+from src.syri_agent import AIVoiceAgent
 from src.browser_agent.web_agent import ConversationManager
+from src.utils.config import TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
+
 
 def display_welcome():
     """Display welcome message and instructions."""
