@@ -9,7 +9,7 @@ import os
 import time
 import sys
 import asyncio
-from src.syri_agent_simpler import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
+from src.syri_agent import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
 from src.browser_agent.web_agent import ConversationManager
 
 def display_welcome():

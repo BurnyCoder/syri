@@ -21,7 +21,7 @@ import argparse
 from dotenv import load_dotenv
 import assemblyai as aai
 sys.path.append('.')
-from src.syri_agent_simpler import AIVoiceAgent
+from syri_agent import AIVoiceAgent
 
 def main():
     parser = argparse.ArgumentParser()
