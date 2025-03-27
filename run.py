@@ -11,23 +11,12 @@ import sys
 import asyncio
 from src.syri_agent import AIVoiceAgent, TRIGGER_DIR, STATE_FILE, ABORT_TRIGGER_FILE
 from src.browser_agent.web_agent import ConversationManager
-
-def display_welcome():
-    """Display welcome message and instructions."""
-    print("\n" + "=" * 50)
-    print(" 🎤  Syri Voice Assistant 🔊")
-    print("=" * 50)
-    print("\nThis assistant uses:")
-    print("  • AssemblyAI for speech-to-text")
-    print("  • Web browser agent (with Claude 3.7 Sonnet) for AI processing")
-    print("  • OpenAI TTS for text-to-speech")
-    print("\nStarting up...")
-    time.sleep(1)
-
+from src.utils.system_utils import display_welcome
 
 async def main():
     """Main entry point for the voice assistant."""
     display_welcome()
+    time.sleep(1)
 
     # Ensure trigger directory exists
     if not os.path.exists(TRIGGER_DIR):
