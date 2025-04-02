@@ -68,6 +68,10 @@ This script performs pre-checks and starts the assistant in an inactive listenin
 3. Press Enter again or run `./scripts/stop_listening.sh` when done
 4. The AI will transcribe your speech, process it through the web agent, and respond both in text (console) and through speech
 
+## Context
+
+This is PoC sketch. Newer version uses OpenAI voice agents and was moved to different repo. 
+
 ## How It Works
 
 When you speak to Syri:
