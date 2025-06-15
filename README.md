@@ -1,5 +1,7 @@
 # Syri - AI Voice Assistant
 
+This is snapshot of early development. Newer versions are private.
+
 An open-source AI voice assistant that uses:
 - OpenAI Whisper for speech-to-text
 - Web browser-based agent for AI response generation (using Claude 3.7 Sonnet)
